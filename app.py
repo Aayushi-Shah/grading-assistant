@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, send_from_directory, send_file
 from flask_migrate import Migrate
 from flask_cors import CORS
 from config import Config
@@ -6,13 +6,13 @@ from models import db, Professor, Assignment, GradingReport, SubmissionResult
 import os
 
 # Initialize Flask app
-app = Flask(__name__)
+app = Flask(__name__, static_folder='../frontend/build', static_url_path='')
 app.config.from_object(Config)
 
 # Initialize extensions
 db.init_app(app)
 migrate = Migrate(app, db)
-CORS(app)
+CORS(app, origins=['http://localhost:3000', 'http://localhost:5001'])
 
 # Create upload directory if it doesn't exist
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -21,8 +21,17 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 from routes import main_bp
 app.register_blueprint(main_bp)
 
-@app.route('/')
-def index():
+# Serve React App
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve_react_app(path):
+    if path != "" and os.path.exists(os.path.join(app.static_folder, path)):
+        return send_from_directory(app.static_folder, path)
+    else:
+        return send_from_directory(app.static_folder, 'index.html')
+
+@app.route('/api/health')
+def health_check():
     return {
         'message': 'Grading Assistant API',
         'version': '1.0.0',

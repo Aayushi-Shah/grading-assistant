@@ -177,3 +177,85 @@ def submission_results():
         db.session.add(result)
         db.session.commit()
         return jsonify(result.to_dict()), 201
+
+# LLM Integration Endpoints
+@main_bp.route('/api/assignments/<int:assignment_id>/llm/process', methods=['POST'])
+def trigger_llm_processing(assignment_id):
+    """Trigger LLM processing for an assignment"""
+    assignment = Assignment.query.get_or_404(assignment_id)
+    
+    data = request.get_json()
+    ideal_solution = data.get('ideal_solution')
+    rubrics = data.get('rubrics')
+    
+    # Update assignment with LLM data
+    assignment.ideal_solution = ideal_solution
+    assignment.rubrics = rubrics
+    assignment.llm_processing_status = 'processing'
+    assignment.llm_processed_at = datetime.utcnow()
+    
+    db.session.commit()
+    
+    # TODO: Here you would trigger the actual LLM API call
+    # For now, we'll simulate the processing
+    return jsonify({
+        'message': 'LLM processing triggered successfully',
+        'assignment_id': assignment_id,
+        'status': 'processing',
+        'estimated_completion': '5-10 minutes'
+    }), 200
+
+@main_bp.route('/api/assignments/<int:assignment_id>/llm/status', methods=['GET'])
+def get_llm_processing_status(assignment_id):
+    """Get the current LLM processing status"""
+    assignment = Assignment.query.get_or_404(assignment_id)
+    
+    return jsonify({
+        'assignment_id': assignment_id,
+        'status': assignment.llm_processing_status,
+        'processed_at': assignment.llm_processed_at.isoformat() if assignment.llm_processed_at else None,
+        'ideal_solution': assignment.ideal_solution,
+        'rubrics': assignment.rubrics
+    })
+
+@main_bp.route('/api/assignments/<int:assignment_id>/llm/verify', methods=['POST'])
+def verify_ideal_solution(assignment_id):
+    """Professor verifies the ideal solution before grading"""
+    assignment = Assignment.query.get_or_404(assignment_id)
+    
+    data = request.get_json()
+    is_approved = data.get('approved', False)
+    feedback = data.get('feedback', '')
+    
+    if is_approved:
+        assignment.llm_processing_status = 'approved'
+        # TODO: Trigger actual grading process here
+        return jsonify({
+            'message': 'Ideal solution approved. Grading process started.',
+            'status': 'grading_started'
+        }), 200
+    else:
+        assignment.llm_processing_status = 'rejected'
+        return jsonify({
+            'message': 'Ideal solution rejected. Please provide feedback.',
+            'status': 'rejected',
+            'feedback': feedback
+        }), 200
+
+@main_bp.route('/api/assignments/<int:assignment_id>/csv', methods=['GET'])
+def download_grading_csv(assignment_id):
+    """Download grading results as CSV"""
+    assignment = Assignment.query.get_or_404(assignment_id)
+    submission_results = SubmissionResult.query.filter_by(assignment_id=assignment_id).all()
+    
+    # Create CSV content
+    csv_content = "Student Name,Student ID,Score,Max Score,Percentage,Feedback,Grading Status\n"
+    for result in submission_results:
+        percentage = (result.score / result.max_score * 100) if result.max_score > 0 else 0
+        csv_content += f'"{result.student_name}","{result.student_id}",{result.score},{result.max_score},{percentage:.1f}%,"{result.feedback}","{result.grading_status}"\n'
+    
+    return jsonify({
+        'csv_content': csv_content,
+        'filename': f'assignment_{assignment_id}_grading_results.csv',
+        'total_submissions': len(submission_results)
+    })

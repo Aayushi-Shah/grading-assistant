@@ -43,6 +43,12 @@ class Assignment(db.Model):
     zip_file_path = db.Column(db.String(500))
     extracted_folder_path = db.Column(db.String(500))
     
+    # LLM Integration fields (commented out for now to fix schema issues)
+    # ideal_solution = db.Column(Text)
+    # rubrics = db.Column(Text)
+    # llm_processing_status = db.Column(db.String(50), default='pending')  # pending, processing, completed, error
+    # llm_processed_at = db.Column(db.DateTime)
+    
     # Relationships
     grading_reports = db.relationship('GradingReport', backref='assignment', lazy=True, cascade='all, delete-orphan')
     submission_results = db.relationship('SubmissionResult', backref='assignment', lazy=True, cascade='all, delete-orphan')
