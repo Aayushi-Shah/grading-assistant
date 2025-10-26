@@ -50,103 +50,127 @@ const AssignmentCard = React.memo(({ assignment, index, onViewGrades, onDownload
   return (
     <motion.div 
       key={assignment.id} 
-      className="bg-gradient-to-br from-white to-blue-50/30 dark:from-gray-700 dark:to-gray-600/30 rounded-2xl border border-gray-200/50 dark:border-gray-600/50 p-6 hover:shadow-xl transition-all duration-300 cursor-pointer group"
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 1.2 + index * 0.1, duration: 0.4 }}
+      className="relative group bg-gradient-to-br from-white via-slate-50 to-blue-50/30 dark:from-gray-800 dark:via-gray-700 dark:to-blue-900/20 rounded-2xl border border-slate-200/60 dark:border-gray-600/40 p-6 hover:shadow-2xl hover:shadow-blue-500/10 transition-all duration-500 cursor-pointer overflow-hidden"
+      initial={{ opacity: 0, y: 20, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ 
+        delay: 1.2 + index * 0.1, 
+        duration: 0.5,
+        type: "spring",
+        stiffness: 120
+      }}
       whileHover={{ 
         scale: 1.02, 
-        boxShadow: "0 10px 25px rgba(0,0,0,0.1)" 
+        y: -4,
+        boxShadow: "0 20px 40px rgba(59, 130, 246, 0.15)" 
       }}
     >
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex-1">
+      {/* Delete Button - Cross Icon */}
+      <motion.button
+        onClick={(e) => {
+          e.stopPropagation();
+          onDeleteAssignment(assignment);
+        }}
+        className="absolute top-4 right-4 w-8 h-8 bg-red-500/10 hover:bg-red-500/20 rounded-full flex items-center justify-center transition-all duration-300 z-20 group/delete"
+        whileHover={{ scale: 1.1, rotate: 90 }}
+        whileTap={{ scale: 0.9 }}
+      >
+        <svg className="w-4 h-4 text-red-500 group-hover/delete:text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </motion.button>
+
+      {/* Background Pattern */}
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-transparent to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+      
+      {/* Floating Accent */}
+      <div className="absolute top-6 right-16 w-2 h-2 bg-blue-400 rounded-full opacity-60 group-hover:opacity-100 transition-opacity duration-300"></div>
+      
+      <div className="relative z-10">
+        {/* Header Section */}
+        <div className="flex items-start justify-between mb-5">
+          <div className="flex-1 pr-8">
           <div className="flex items-center space-x-3 mb-3">
-            <div className="bg-blue-100 dark:bg-blue-900/20 p-2 rounded-lg group-hover:bg-blue-200 dark:group-hover:bg-blue-800/30 transition-colors">
-              <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-            </div>
-            <h4 className="text-lg font-semibold text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+              <motion.div 
+                className="relative p-2.5 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-xl shadow-lg"
+                whileHover={{ rotate: 3, scale: 1.05 }}
+                transition={{ type: "spring", stiffness: 300 }}
+              >
+                <FileText className="w-5 h-5 text-white" />
+              </motion.div>
+              <div className="flex-1 min-w-0">
+                <h4 className="text-lg font-bold text-slate-800 dark:text-white truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors duration-300">
               {assignment.title}
             </h4>
+                <div className="flex items-center space-x-2 mt-1">
+                  <div className={`w-2 h-2 rounded-full ${assignment.is_graded ? 'bg-emerald-500' : 'bg-amber-500'} shadow-sm`}></div>
+                  <span className={`text-xs font-semibold ${assignment.is_graded ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                    {assignment.is_graded ? 'Graded' : 'Ungraded'}
+                  </span>
+                </div>
+              </div>
           </div>
           
-          <p className="text-gray-600 dark:text-gray-300 text-sm mb-4 line-clamp-2">
+            <p className="text-slate-600 dark:text-slate-300 text-sm mb-4 line-clamp-2 leading-relaxed">
             {assignment.description}
           </p>
           
-          <div className="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400">
-            <div className="flex items-center space-x-1">
-              <Calendar className="w-4 h-4" />
-              <span>Due: {new Date(assignment.due_date).toLocaleDateString()}</span>
-            </div>
-            <div className="flex items-center space-x-1">
-              <Target className="w-4 h-4" />
-              <span>{assignment.max_points} pts</span>
-            </div>
-            {assignment.average_score !== null && assignment.average_score !== undefined && (
-              <div className="flex items-center space-x-1">
-                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                <span className="font-medium text-green-600 dark:text-green-400">
-                  Avg: {assignment.average_score?.toFixed(2)}%
+            {/* Stats Row */}
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <div className="flex items-center space-x-1.5 bg-slate-100 dark:bg-slate-700/50 rounded-lg px-2.5 py-1.5">
+                <Calendar className="w-3.5 h-3.5 text-indigo-500" />
+                <span className="font-medium text-slate-700 dark:text-slate-300">
+                  {new Date(assignment.due_date).toLocaleDateString()}
                 </span>
-              </div>
-            )}
+            </div>
+              <div className="flex items-center space-x-1.5 bg-slate-100 dark:bg-slate-700/50 rounded-lg px-2.5 py-1.5">
+                <Target className="w-3.5 h-3.5 text-purple-500" />
+                <span className="font-medium text-slate-700 dark:text-slate-300">
+                  {assignment.max_points} pts
+                </span>
+            </div>
+              {assignment.average_score !== null && assignment.average_score !== undefined && (
+                <div className="flex items-center space-x-1.5 bg-gradient-to-r from-emerald-100 to-green-100 dark:from-emerald-900/30 dark:to-green-900/30 rounded-lg px-2.5 py-1.5">
+                  <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
+                  <span className="font-bold text-emerald-700 dark:text-emerald-400">
+                    {assignment.average_score?.toFixed(2)}%
+                  </span>
           </div>
+              )}
         </div>
       </div>
-      
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-2">
-          <div className={`w-2 h-2 rounded-full ${assignment.is_graded ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
-          <span className={`text-sm ${assignment.is_graded ? 'text-green-600 dark:text-green-400' : 'text-yellow-600 dark:text-yellow-400'}`}>
-            {assignment.is_graded ? 'Graded' : 'Ungraded'}
-          </span>
         </div>
         
-        <div className="flex space-x-2">
-          {assignment.is_graded && (
-            <>
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onViewGrades(assignment);
-                }}
-                className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-lg text-xs font-medium flex items-center space-x-1 transition-colors"
-              >
-                <Eye className="w-3 h-3" />
-                <span>View</span>
-              </motion.button>
-              
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDownloadCSV(assignment);
-                }}
-                className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-lg text-xs font-medium flex items-center space-x-1 transition-colors"
-              >
-                <Download className="w-3 h-3" />
-                <span>CSV</span>
-              </motion.button>
-            </>
-          )}
+        {/* Action Buttons */}
+        {assignment.is_graded && (
+          <div className="flex space-x-2 pt-4 border-t border-slate-200/50 dark:border-slate-700/50">
+          <motion.button
+              whileHover={{ scale: 1.02, y: -1 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onViewGrades(assignment);
+              }}
+              className="flex-1 bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 text-white px-4 py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center space-x-2 transition-all duration-300 shadow-md hover:shadow-lg"
+            >
+              <Eye className="w-4 h-4" />
+              <span>View Grades</span>
+          </motion.button>
           
           <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={(e) => {
-              e.stopPropagation();
-              onDeleteAssignment(assignment);
-            }}
-            className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-lg text-xs font-medium flex items-center space-x-1 transition-colors"
-          >
-            <Trash2 className="w-3 h-3" />
-            <span>Delete</span>
+              whileHover={{ scale: 1.02, y: -1 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onDownloadCSV(assignment);
+              }}
+              className="flex-1 bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white px-4 py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center space-x-2 transition-all duration-300 shadow-md hover:shadow-lg"
+            >
+              <Download className="w-4 h-4" />
+              <span>Download CSV</span>
           </motion.button>
         </div>
+        )}
       </div>
     </motion.div>
   );
@@ -534,8 +558,6 @@ const SimpleDashboard: React.FC = () => {
     const stateRestored = loadChatbotState();
     if (stateRestored) {
       console.log('✅ Chatbot state restored from localStorage');
-      // Add a notification message about state restoration
-      addBotMessage(`🔄 **Welcome back!**\n\nI've restored your previous conversation and assignment progress. You can continue where you left off or start fresh by clicking the "Clear" button.`);
       // Scroll to bottom after state is restored
       setTimeout(scrollToBottom, 100);
     }
@@ -1233,39 +1255,52 @@ const SimpleDashboard: React.FC = () => {
       addBotMessage("⚙️ **Settings & Preferences:**\n\n**Available Options:**\n• **Theme Toggle** - Switch between light/dark mode\n• **Display Preferences** - Customize dashboard view\n• **Notification Settings** - Control alerts and updates\n• **Export Preferences** - Default CSV formats\n\n**Current Settings:**\n• Theme: " + (isDarkMode ? 'Dark Mode' : 'Light Mode') + "\n• Professor: " + (professor?.name || 'Not loaded') + "\n• Department: " + (professor?.department || 'Not specified') + "\n\nUse the theme toggle in the top-right corner to switch modes!");
     } else if (userInput.includes('grading') || userInput.includes('rubric') || userInput.includes('criteria')) {
       addBotMessage("📝 **Grading Assistance:**\n\n**Rubric Guidelines:**\n• **Clear Criteria** - Define specific expectations\n• **Point Distribution** - Allocate points logically\n• **Feedback Templates** - Consistent evaluation format\n• **Common Patterns** - Identify typical issues\n\n**Best Practices:**\n• Use detailed rubrics for consistency\n• Provide constructive feedback\n• Track common mistakes\n• Maintain grading standards\n\n**Need help with specific grading criteria?** I can guide you through the process!");
-    } else {
-      addBotMessage("🤖 **I'm here to help!** Here are some things you can ask me:\n\n**📝 Assignment Tasks:**\n• 'Create assignment' - Start new assignment\n• 'View assignments' - See all assignments\n• 'Assignment details' - Get specific info\n\n**📁 Submission Tasks:**\n• 'View submissions' - Browse student files\n• 'Download files' - Get submission data\n• 'Check status' - Submission tracking\n\n**📊 Analytics Tasks:**\n• 'Show analytics' - Performance data\n• 'Download CSV' - Export reports\n• 'Statistics' - Key metrics\n\n**🛠️ Support Tasks:**\n• 'Help' - Get assistance\n• 'Navigate' - Dashboard tour\n• 'Settings' - Preferences\n\n**What would you like to do?**");
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 transition-colors duration-300">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/50 to-indigo-50 dark:from-slate-900 dark:via-slate-800 dark:to-indigo-900/50 transition-all duration-500">
+      {/* Animated Background Elements */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-indigo-400/15 to-blue-400/15 rounded-full blur-3xl animate-pulse"></div>
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-gradient-to-br from-purple-400/15 to-pink-400/15 rounded-full blur-3xl animate-pulse delay-1000"></div>
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-gradient-to-br from-cyan-400/8 to-indigo-400/8 rounded-full blur-3xl animate-pulse delay-500"></div>
+        <div className="absolute top-1/4 right-1/4 w-64 h-64 bg-gradient-to-br from-emerald-400/10 to-teal-400/10 rounded-full blur-2xl animate-pulse delay-700"></div>
+      </div>
+
       {/* Header */}
       <motion.header 
-        className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg shadow-xl border-b border-blue-100 dark:border-gray-700 sticky top-0 z-50"
-        initial={{ y: -100 }}
-        animate={{ y: 0 }}
-        transition={{ duration: 0.6, ease: "easeOut" }}
+        className="relative bg-white/80 dark:bg-slate-800/80 backdrop-blur-2xl shadow-2xl border-b border-slate-200/30 dark:border-slate-700/50 sticky top-0 z-50"
+        initial={{ y: -100, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.8, ease: "easeOut" }}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-6">
             <motion.div 
               className="flex items-center"
-              initial={{ opacity: 0, x: -20 }}
+              initial={{ opacity: 0, x: -30 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.2 }}
+              transition={{ delay: 0.3, duration: 0.6 }}
             >
-              <div className="flex items-center space-x-3">
+              <div className="flex items-center space-x-4">
                 <motion.div
-                  className="w-10 h-10 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl flex items-center justify-center"
-                  whileHover={{ rotate: 360 }}
-                  transition={{ duration: 0.5 }}
+                  className="relative w-12 h-12 bg-gradient-to-br from-blue-600 via-purple-600 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg"
+                  whileHover={{ 
+                    rotate: 360, 
+                    scale: 1.1,
+                    boxShadow: "0 20px 40px rgba(59, 130, 246, 0.3)"
+                  }}
+                  transition={{ duration: 0.6 }}
                 >
-                  <GraduationCap className="w-6 h-6 text-white" />
+                  <GraduationCap className="w-7 h-7 text-white" />
+                  <div className="absolute inset-0 bg-gradient-to-br from-blue-400 to-purple-400 rounded-2xl blur opacity-30"></div>
                 </motion.div>
                 <div>
-                  <h1 className="text-xl font-bold text-gray-900 dark:text-white">Grading Assistant</h1>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">AI-Powered</p>
+                  <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 via-blue-900 to-purple-900 dark:from-white dark:via-blue-100 dark:to-purple-100 bg-clip-text text-transparent">
+                    Grading Assistant
+                  </h1>
+                  <p className="text-sm font-medium text-blue-600 dark:text-blue-400">AI-Powered Intelligence</p>
               </div>
               </div>
             </motion.div>
@@ -1273,31 +1308,32 @@ const SimpleDashboard: React.FC = () => {
             <div className="flex items-center space-x-4">
               <motion.button
                 onClick={toggleTheme}
-                className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors duration-200"
-                whileHover={{ scale: 1.05 }}
+                className="relative p-3 rounded-xl bg-white/50 dark:bg-gray-700/50 backdrop-blur-sm hover:bg-white/80 dark:hover:bg-gray-600/80 transition-all duration-300 shadow-lg hover:shadow-xl"
+                whileHover={{ scale: 1.1, rotate: 15 }}
                 whileTap={{ scale: 0.95 }}
               >
                 {isDarkMode ? (
                   <Sun className="w-5 h-5 text-yellow-500" />
                 ) : (
-                  <Moon className="w-5 h-5 text-gray-600" />
+                  <Moon className="w-5 h-5 text-indigo-600" />
                 )}
               </motion.button>
 
               <motion.div 
-                className="hidden md:flex items-center space-x-3 bg-white/50 dark:bg-gray-700/50 rounded-xl px-4 py-2"
-                initial={{ opacity: 0, x: 20 }}
+                className="hidden md:flex items-center space-x-4 bg-white/60 dark:bg-gray-700/60 backdrop-blur-xl rounded-2xl px-6 py-3 shadow-xl border border-white/20 dark:border-gray-600/20"
+                initial={{ opacity: 0, x: 30 }}
                 animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.4 }}
+                transition={{ delay: 0.5, duration: 0.6 }}
               >
-                <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
-                  <span className="text-white text-sm font-medium">
+                <div className="relative w-10 h-10 bg-gradient-to-br from-blue-500 via-purple-500 to-indigo-500 rounded-xl flex items-center justify-center shadow-lg">
+                  <span className="text-white text-sm font-bold">
                   {professor?.name?.charAt(0) || 'P'}
                 </span>
+                  <div className="absolute inset-0 bg-gradient-to-br from-blue-400 to-purple-400 rounded-xl blur opacity-40"></div>
               </div>
                 <div>
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">{professor?.name}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">{professor?.department}</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">{professor?.name}</p>
+                  <p className="text-xs font-medium text-blue-600 dark:text-blue-400">{professor?.department}</p>
                 </div>
               </motion.div>
             </div>
@@ -1314,11 +1350,15 @@ const SimpleDashboard: React.FC = () => {
           transition={{ delay: 0.4, duration: 0.6 }}
         >
           <motion.div 
-            className="bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 rounded-2xl p-6 text-white shadow-xl"
+            className="relative bg-gradient-to-r from-indigo-600 via-purple-600 to-blue-600 rounded-2xl p-8 text-white shadow-2xl overflow-hidden"
             whileHover={{ scale: 1.01 }}
             transition={{ type: "spring", stiffness: 300 }}
           >
-            <div className="flex flex-col lg:flex-row items-center justify-between">
+            {/* Background Pattern */}
+            <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-white/5"></div>
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
+            <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
+            <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-6">
               <motion.div
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
@@ -1343,7 +1383,7 @@ const SimpleDashboard: React.FC = () => {
                 </motion.p>
               </motion.div>
               <motion.div
-                className="flex items-center space-x-6 mt-4 lg:mt-0"
+                className="flex flex-col sm:flex-row items-center space-y-4 sm:space-y-0 sm:space-x-6 xl:mt-0"
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.8 }}
@@ -1376,64 +1416,99 @@ const SimpleDashboard: React.FC = () => {
         </motion.div>
 
         {/* Main Dashboard Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 lg:gap-8">
           {/* AI Chatbot - Left Side */}
           <motion.div
-            className="lg:col-span-1"
-            initial={{ opacity: 0, x: -20 }}
+            className="xl:col-span-1 order-2 xl:order-1"
+            initial={{ opacity: 0, x: -30 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.6, duration: 0.6 }}
+            transition={{ delay: 0.6, duration: 0.8 }}
           >
-            <div className="bg-gradient-to-br from-white/90 to-blue-50/50 dark:from-gray-800/90 dark:to-gray-700/50 backdrop-blur-lg rounded-3xl shadow-2xl border border-gray-200/50 dark:border-gray-600/50 h-fit max-h-[600px] flex flex-col relative overflow-hidden">
-              <div className="p-6 border-b border-gray-200/30 dark:border-gray-600/30 relative z-10">
+            <div className="relative bg-white/90 dark:bg-slate-800/90 backdrop-blur-2xl rounded-2xl shadow-2xl border border-slate-200/40 dark:border-slate-700/50 h-fit max-h-[700px] flex flex-col overflow-hidden">
+              {/* Background Pattern */}
+              <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/40 via-transparent to-blue-50/40 dark:from-indigo-900/20 dark:to-blue-900/20"></div>
+              <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-indigo-400/10 to-blue-400/10 rounded-full blur-2xl"></div>
+              <div className="absolute bottom-0 left-0 w-24 h-24 bg-gradient-to-tr from-purple-400/10 to-pink-400/10 rounded-full blur-xl"></div>
+              
+              {/* Header */}
+              <div className="relative p-6 border-b border-white/20 dark:border-gray-700/30 z-10">
                 <motion.div 
                   className="flex items-center"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.8 }}
+                  initial={{ opacity: 0, y: -20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.8, duration: 0.6 }}
                 >
                   <motion.div
-                    className="w-12 h-12 bg-gradient-to-br from-green-400 to-blue-500 rounded-2xl flex items-center justify-center mr-4 shadow-lg"
-                    whileHover={{ scale: 1.1, rotate: 5 }}
+                    className="relative w-14 h-14 bg-gradient-to-br from-green-500 via-blue-500 to-purple-600 rounded-2xl flex items-center justify-center mr-4 shadow-xl"
+                    whileHover={{ 
+                      scale: 1.1, 
+                      rotate: 5,
+                      boxShadow: "0 20px 40px rgba(34, 197, 94, 0.3)"
+                    }}
                     transition={{ type: "spring", stiffness: 300 }}
                   >
-                    <Bot className="w-7 h-7 text-white" />
+                    <Bot className="w-8 h-8 text-white" />
+                    <div className="absolute inset-0 bg-gradient-to-br from-green-400 to-blue-400 rounded-2xl blur opacity-30"></div>
                   </motion.div>
-              <div>
-                    <h3 className="text-xl font-bold text-gray-900 dark:text-white">AI Assistant</h3>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Your grading companion</p>
+                  <div className="flex-1">
+                    <h3 className="text-2xl font-bold bg-gradient-to-r from-gray-900 via-blue-900 to-purple-900 dark:from-white dark:via-blue-100 dark:to-purple-100 bg-clip-text text-transparent">
+                      AI Assistant
+                    </h3>
+                    <p className="text-sm font-medium text-blue-600 dark:text-blue-400">Your intelligent grading companion</p>
                     {workflowStep !== 'name' && (
-                      <div className="mt-2 text-xs text-blue-600 dark:text-blue-400 font-medium">
-                        Workflow: {workflowStep === 'question' ? 'Step 2/6: Question Upload' :
-                                  workflowStep === 'solution' ? 'Step 3/6: Solution Generation' :
-                                  workflowStep === 'rubrics' ? 'Step 4/6: Rubrics Input' :
-                                  workflowStep === 'upload' ? 'Step 5/6: Submissions Upload' :
-                                  workflowStep === 'complete' ? 'Step 6/6: Complete' : 'Active'}
-                      </div>
+                      <motion.div 
+                        className="mt-2 inline-flex items-center px-3 py-1 bg-gradient-to-r from-blue-100 to-purple-100 dark:from-blue-900/30 dark:to-purple-900/30 rounded-full text-xs font-semibold text-blue-700 dark:text-blue-300"
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: 1.0 }}
+                      >
+                        <div className="w-2 h-2 bg-blue-500 rounded-full mr-2 animate-pulse"></div>
+                        {workflowStep === 'question' ? 'Step 2/6: Question Upload' :
+                         workflowStep === 'solution' ? 'Step 3/6: Solution Generation' :
+                         workflowStep === 'rubrics' ? 'Step 4/6: Rubrics Input' :
+                         workflowStep === 'upload' ? 'Step 5/6: Submissions Upload' :
+                         workflowStep === 'complete' ? 'Step 6/6: Complete' : 'Active'}
+                      </motion.div>
                     )}
               </div>
                 </motion.div>
               </div>
               
-              <div className="p-6 flex-1 flex flex-col">
-                <div className="flex-1 overflow-y-auto mb-4 space-y-3 min-h-[200px] max-h-[300px] scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent">
+              {/* Chat Messages Area */}
+              <div className="relative p-6 flex-1 flex flex-col z-10">
+                <div className="flex-1 overflow-y-auto mb-6 space-y-4 min-h-[250px] max-h-[400px] scrollbar-thin scrollbar-thumb-blue-300 dark:scrollbar-thumb-blue-600 scrollbar-track-transparent">
                   {chatMessages.map((message, index) => (
                     <motion.div 
                       key={message.id} 
                       className={`flex ${message.isUser ? 'justify-end' : 'justify-start'}`}
                       initial={{ opacity: 0, y: 20, scale: 0.8 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
-                      transition={{ delay: index * 0.1, duration: 0.3 }}
+                      transition={{ 
+                        delay: index * 0.1, 
+                        duration: 0.4,
+                        type: "spring",
+                        stiffness: 100
+                      }}
                     >
                       <motion.div 
-                        className={`max-w-xs px-4 py-3 rounded-2xl shadow-lg ${
+                        className={`relative max-w-sm px-5 py-4 rounded-3xl shadow-xl ${
                           message.isUser 
-                            ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white ml-auto' 
-                            : 'bg-white/80 dark:bg-gray-700/80 text-gray-800 dark:text-gray-200 border border-gray-200/50 dark:border-gray-600/50'
+                            ? 'bg-gradient-to-r from-blue-500 via-blue-600 to-indigo-600 text-white ml-auto' 
+                            : 'bg-white/90 dark:bg-gray-700/90 text-gray-800 dark:text-gray-200 border border-white/20 dark:border-gray-600/20 backdrop-blur-sm'
                         }`}
-                        whileHover={{ scale: 1.02 }}
+                        whileHover={{ 
+                          scale: 1.02,
+                          y: -2,
+                          boxShadow: message.isUser 
+                            ? "0 15px 35px rgba(59, 130, 246, 0.3)" 
+                            : "0 15px 35px rgba(0, 0, 0, 0.1)"
+                        }}
                         transition={{ type: "spring", stiffness: 300 }}
                       >
+                        {/* Message Background Glow */}
+                        {message.isUser && (
+                          <div className="absolute inset-0 bg-gradient-to-r from-blue-400 to-indigo-500 rounded-3xl blur opacity-20"></div>
+                        )}
                         {message.text.includes('```') ? (
                           <div className="text-sm">
                             {message.text.split('```').map((part, index) => {
@@ -1572,10 +1647,10 @@ const SimpleDashboard: React.FC = () => {
                   
                   {/* Grading Progress Loader */}
                   {isGrading && (
-                    <motion.div 
+                <motion.div 
                       className="flex justify-start"
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.3 }}
                     >
                       <motion.div 
@@ -1606,16 +1681,20 @@ const SimpleDashboard: React.FC = () => {
                   <div ref={messagesEndRef} />
                 </div>
 
+                {/* Input Form */}
                 <motion.div 
                   className="relative z-10 mt-auto"
-                  initial={{ opacity: 0, y: 20 }}
+                  initial={{ opacity: 0, y: 30 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 1.2, duration: 0.4 }}
+                  transition={{ delay: 1.2, duration: 0.6 }}
                 >
                   <form 
                     onSubmit={handleChatSubmit} 
-                    className="flex space-x-3 bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg rounded-2xl p-4 border border-gray-200/50 dark:border-gray-600/50 shadow-lg"
+                    className="relative flex space-x-3 bg-white/95 dark:bg-slate-800/95 backdrop-blur-2xl rounded-2xl p-4 border border-slate-200/40 dark:border-slate-700/50 shadow-xl"
                   >
+                    {/* Input Background Glow */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-indigo-50/60 to-blue-50/60 dark:from-indigo-900/20 dark:to-blue-900/20 rounded-2xl"></div>
+                    
                     <div className="flex-1 relative">
                       <input
                         type="text"
@@ -1624,43 +1703,42 @@ const SimpleDashboard: React.FC = () => {
                         onFocus={(e) => e.target.placeholder = "Ask me about grading, assignments, or analytics..."}
                         onBlur={(e) => e.target.placeholder = "Ask me about grading..."}
                         placeholder="Ask me about grading..."
-                        className="w-full px-4 py-3 bg-transparent border-none focus:outline-none text-sm text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 transition-all duration-200"
+                        className="w-full px-5 py-4 bg-transparent border-none focus:outline-none text-base text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 transition-all duration-300 font-medium"
                         style={{ 
-                          boxShadow: chatInput ? '0 0 0 2px rgba(59, 130, 246, 0.2)' : 'none'
+                          boxShadow: chatInput ? '0 0 0 3px rgba(59, 130, 246, 0.3)' : 'none'
                         }}
                       />
                       {chatInput && (
                         <motion.div
-                          className="absolute right-3 top-1/2 transform -translate-y-1/2"
+                          className="absolute right-4 top-1/2 transform -translate-y-1/2"
                           initial={{ opacity: 0, scale: 0.8 }}
                           animate={{ opacity: 1, scale: 1 }}
                           exit={{ opacity: 0, scale: 0.8 }}
                         >
-                          <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                          <div className="w-3 h-3 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full animate-pulse shadow-lg"></div>
                         </motion.div>
                       )}
                     </div>
+                    
                     <motion.button
                       type="submit"
                       disabled={!chatInput.trim()}
-                      className={`px-6 py-3 rounded-xl text-sm font-medium transition-all duration-200 flex items-center space-x-2 ${
+                      className={`relative px-5 py-3 rounded-xl text-sm font-semibold transition-all duration-300 flex items-center space-x-2 ${
                         chatInput.trim() 
-                          ? 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-lg hover:shadow-xl' 
-                          : 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+                          ? 'bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 text-white shadow-lg hover:shadow-xl' 
+                          : 'bg-slate-300 dark:bg-slate-600 text-slate-500 dark:text-slate-400 cursor-not-allowed'
                       }`}
-                      whileHover={chatInput.trim() ? { scale: 1.05 } : {}}
-                      whileTap={chatInput.trim() ? { scale: 0.95 } : {}}
+                      whileHover={chatInput.trim() ? { 
+                        scale: 1.02, 
+                        y: -1
+                      } : {}}
+                      whileTap={chatInput.trim() ? { scale: 0.98 } : {}}
                       transition={{ type: "spring", stiffness: 300 }}
                     >
                       <span>Send</span>
-                      <motion.div
-                        animate={{ rotate: chatInput.trim() ? 0 : 0 }}
-                        transition={{ duration: 0.2 }}
-                      >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                         </svg>
-                      </motion.div>
                     </motion.button>
                     
                     {/* Clear Chat Button */}
@@ -1668,9 +1746,9 @@ const SimpleDashboard: React.FC = () => {
                       <motion.button
                         type="button"
                         onClick={clearChatbotState}
-                        className="px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 flex items-center space-x-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300"
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
+                        className="px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 flex items-center space-x-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300"
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
                         transition={{ type: "spring", stiffness: 300 }}
                         title="Clear chat and start over"
                       >
@@ -1855,34 +1933,34 @@ const SimpleDashboard: React.FC = () => {
 
           {/* Assignments Section - Right Side */}
           <motion.div
-            className="lg:col-span-2"
+            className="xl:col-span-2 order-1 xl:order-2"
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.8, duration: 0.6 }}
           >
-            <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg rounded-2xl shadow-xl border border-gray-200/50 dark:border-gray-700/50">
-              <div className="p-6 border-b border-gray-200/50 dark:border-gray-700/50">
+            <div className="bg-white/90 dark:bg-slate-800/90 backdrop-blur-2xl rounded-2xl shadow-2xl border border-slate-200/40 dark:border-slate-700/50">
+              <div className="relative p-6 border-b border-slate-200/50 dark:border-slate-700/50">
                 <motion.h3 
-                  className="text-2xl font-bold text-gray-900 dark:text-white flex items-center"
+                  className="text-2xl font-bold bg-gradient-to-r from-slate-800 via-indigo-800 to-blue-800 dark:from-white dark:via-indigo-100 dark:to-blue-100 bg-clip-text text-transparent flex items-center"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 1.0 }}
                 >
                   <motion.div
-                    className="w-10 h-10 bg-blue-100 dark:bg-blue-900/20 rounded-xl flex items-center justify-center mr-4"
-                    whileHover={{ rotate: 360 }}
+                    className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-xl flex items-center justify-center mr-4 shadow-lg"
+                    whileHover={{ rotate: 360, scale: 1.05 }}
                     transition={{ duration: 0.5 }}
                   >
-                    <FileText className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                    <FileText className="w-6 h-6 text-white" />
                   </motion.div>
                   Your Assignments
                 </motion.h3>
-                <p className="text-gray-600 dark:text-gray-400 mt-2">Click on any assignment to view details</p>
+                <p className="text-slate-600 dark:text-slate-400 mt-2 font-medium">Click on any assignment to view details</p>
               </div>
               
               <div className="p-6">
                 {memoizedAssignments.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-3 gap-4 sm:gap-6">
                     {memoizedAssignments.map((assignment, index) => (
                       <AssignmentCard 
                         key={assignment.id}
@@ -2196,7 +2274,7 @@ const SimpleDashboard: React.FC = () => {
                   )}
                 </button>
               </div>
-            </div>
+          </div>
           </motion.div>
         </motion.div>
       )}
