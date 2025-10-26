@@ -4,6 +4,7 @@ import os
 import zipfile
 import shutil
 from datetime import datetime
+from ai_service import grade_all_submissions
 
 main_bp = Blueprint('main', __name__)
 
@@ -177,3 +178,106 @@ def submission_results():
         db.session.add(result)
         db.session.commit()
         return jsonify(result.to_dict()), 201
+
+@main_bp.route('/api/assignments/<int:assignment_id>/grade', methods=['POST'])
+def grade_assignment(assignment_id):
+    """
+    Grade all submissions for an assignment using AI
+    """
+    try:
+        # Get assignment
+        assignment = Assignment.query.get_or_404(assignment_id)
+        
+        # Get request data
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No JSON data provided'}), 400
+        
+        rubric = data.get('rubric')
+        max_points = data.get('max_points', assignment.max_points)
+        
+        if not rubric:
+            return jsonify({'error': 'Rubric is required'}), 400
+        
+        # Call AI grading function
+        result = grade_all_submissions(assignment_id, rubric, max_points)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Grading completed successfully',
+            'report_id': result['report_id'],
+            'assignment_id': result['assignment_id'],
+            'total_submissions': result['total_submissions'],
+            'successful_grades': result['successful_grades'],
+            'average_score': result['average_score'],
+            'results': result['results']
+        }), 200
+        
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': f'Grading failed: {str(e)}'}), 500
+
+@main_bp.route('/api/assignments/<int:assignment_id>/grade-async', methods=['POST'])
+def grade_assignment_async(assignment_id):
+    """
+    Start grading process asynchronously (returns immediately)
+    """
+    try:
+        # Get assignment
+        assignment = Assignment.query.get_or_404(assignment_id)
+        
+        # Get request data
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No JSON data provided'}), 400
+        
+        rubric = data.get('rubric')
+        max_points = data.get('max_points', assignment.max_points)
+        
+        if not rubric:
+            return jsonify({'error': 'Rubric is required'}), 400
+        
+        # Start grading in background (simplified for now)
+        import threading
+        
+        def grade_background():
+            try:
+                grade_all_submissions(assignment_id, rubric, max_points)
+                print(f"✅ Background grading completed for assignment {assignment_id}")
+            except Exception as e:
+                print(f"❌ Background grading failed: {e}")
+        
+        # Start background thread
+        thread = threading.Thread(target=grade_background)
+        thread.daemon = True
+        thread.start()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Grading started in background',
+            'assignment_id': assignment_id,
+            'status': 'processing'
+        }), 202
+        
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': f'Failed to start grading: {str(e)}'}), 500
+
+@main_bp.route('/api/grading-reports/<int:report_id>', methods=['GET'])
+def get_grading_report(report_id):
+    """
+    Get detailed results for a specific grading report
+    """
+    try:
+        report = GradingReport.query.get_or_404(report_id)
+        submissions = SubmissionResult.query.filter_by(assignment_id=report.assignment_id).all()
+        
+        return jsonify({
+            'report': report.to_dict(),
+            'submissions': [sub.to_dict() for sub in submissions]
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': f'Failed to get report: {str(e)}'}), 500
