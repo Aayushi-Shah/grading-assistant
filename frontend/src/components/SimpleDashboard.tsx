@@ -133,8 +133,75 @@ const SimpleDashboard: React.FC = () => {
   const [isGeneratingSolution, setIsGeneratingSolution] = useState(false);
   const [isGrading, setIsGrading] = useState(false);
   const [gradingProgress, setGradingProgress] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [showSolutionModal, setShowSolutionModal] = useState(false);
   const [solutionChangeCount, setSolutionChangeCount] = useState(0);
+  const [isStateSaved, setIsStateSaved] = useState(false);
+
+  // State persistence functions
+  const saveChatbotState = () => {
+    const state = {
+      chatMessages,
+      currentStep,
+      assignmentData: {
+        ...assignmentData,
+        file: null // Don't persist File objects
+      },
+      solutionChangeCount,
+      timestamp: Date.now()
+    };
+    localStorage.setItem('gradingAssistant_chatbotState', JSON.stringify(state));
+    
+    // Show saved indicator
+    setIsStateSaved(true);
+    setTimeout(() => setIsStateSaved(false), 2000);
+  };
+
+  const loadChatbotState = () => {
+    try {
+      const savedState = localStorage.getItem('gradingAssistant_chatbotState');
+      if (savedState) {
+        const state = JSON.parse(savedState);
+        
+        // Only restore if state is less than 24 hours old
+        if (Date.now() - state.timestamp < 24 * 60 * 60 * 1000) {
+          setChatMessages(state.chatMessages || []);
+          setCurrentStep(state.currentStep || 0);
+          setAssignmentData(state.assignmentData || {
+            title: '',
+            description: '',
+            file: null,
+            solution: '',
+            rubrics: '',
+            maxPoints: 100,
+            assignmentId: null
+          });
+          setSolutionChangeCount(state.solutionChangeCount || 0);
+          return true;
+        }
+      }
+    } catch (error) {
+      console.error('Error loading chatbot state:', error);
+    }
+    return false;
+  };
+
+  const clearChatbotState = () => {
+    localStorage.removeItem('gradingAssistant_chatbotState');
+    setChatMessages([]);
+    setCurrentStep(0);
+    setAssignmentData({
+      title: '',
+      description: '',
+      file: null,
+      solution: '',
+      rubrics: '',
+      maxPoints: 100,
+      assignmentId: null
+    });
+    setSolutionChangeCount(0);
+  };
 
   // Stats calculation
   const stats = {
@@ -176,6 +243,24 @@ const SimpleDashboard: React.FC = () => {
     
     fetchDashboardData(professorId);
   }, []);
+
+  // Load chatbot state on component mount
+  useEffect(() => {
+    const stateRestored = loadChatbotState();
+    if (stateRestored) {
+      console.log('✅ Chatbot state restored from localStorage');
+      // Add a notification message about state restoration
+      addBotMessage(`🔄 **Welcome back!**\n\nI've restored your previous conversation and assignment progress. You can continue where you left off or start fresh by clicking the "Clear" button.`);
+    }
+  }, []);
+
+  // Save chatbot state whenever important state changes
+  useEffect(() => {
+    // Only save if we have meaningful state (not just initial empty state)
+    if (chatMessages.length > 0 || currentStep > 0 || assignmentData.title || assignmentData.solution) {
+      saveChatbotState();
+    }
+  }, [chatMessages, currentStep, assignmentData, solutionChangeCount]);
 
   const fetchDashboardData = async (professorId?: string | null) => {
     try {
@@ -395,6 +480,9 @@ const SimpleDashboard: React.FC = () => {
   const handleStudentSubmissionsUpload = async (file: File) => {
     addBotMessage(`📁 **Student Submissions Uploaded!**\n\nFile: ${file.name} (${(file.size / 1024).toFixed(1)}KB)\n\nNow uploading student submissions and starting grading process...`);
     
+    setIsUploading(true);
+    setUploadProgress(0);
+    
     try {
       // Check if we have a valid assignment ID
       if (!assignmentData.assignmentId) {
@@ -407,12 +495,20 @@ const SimpleDashboard: React.FC = () => {
       const uploadFormData = new FormData();
       uploadFormData.append('file', file);
       
-      addBotMessage(`⏳ **Uploading and processing... This may take up to a minute...**\n\nPlease wait while the system:\n• Uploads your ZIP file\n• Extracts all Python files\n• Generates a reference solution\n• Grades each student submission`);
+      addBotMessage(`⏳ **Uploading and processing... This may take 2-4 minutes...**\n\nPlease wait while the system:\n• Uploads your ZIP file\n• Extracts all Python files\n• Generates a reference solution\n• Grades each student submission`);
+      
+      // Simulate progress during upload
+      const progressInterval = setInterval(() => {
+        setUploadProgress(prev => Math.min(prev + 5, 90));
+      }, 500);
       
       const uploadResponse = await fetch(`http://localhost:5002/api/assignments/${assignmentData.assignmentId}/upload`, {
         method: 'POST',
         body: uploadFormData
       });
+      
+      clearInterval(progressInterval);
+      setUploadProgress(100);
       
       if (!uploadResponse.ok) {
         const errorText = await uploadResponse.text();
@@ -431,6 +527,9 @@ const SimpleDashboard: React.FC = () => {
     } catch (error) {
       console.error('Upload error:', error);
       addBotMessage(`❌ **Error uploading student submissions:** ${error instanceof Error ? error.message : 'Unknown error'}\n\nPlease try again.`);
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -439,13 +538,8 @@ const SimpleDashboard: React.FC = () => {
     setGradingProgress(0);
     
     try {
-      // Simulate progress updates
-      const progressInterval = setInterval(() => {
-        setGradingProgress(prev => Math.min(prev + 10, 90));
-      }, 1000);
-
-      // Call the proper grading API endpoint
-      const response = await fetch(`http://localhost:5002/api/assignments/${assignmentId}/grade`, {
+      // Start async grading
+      const response = await fetch(`http://localhost:5002/api/assignments/${assignmentId}/grade-async`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -456,31 +550,67 @@ const SimpleDashboard: React.FC = () => {
         })
       });
 
-      clearInterval(progressInterval);
-      setGradingProgress(100);
-
-      if (response.ok) {
-        const result = await response.json();
-        addBotMessage(`🎉 **Grading Complete!**\n\n✅ ${result.total_submissions} submissions graded\n📊 Average score: ${result.average_score}%\n\nCheck the analytics dashboard for detailed insights!`);
-        
-        // Show notification
-        if ('Notification' in window && Notification.permission === 'granted') {
-          new Notification('Grading Complete!', {
-            body: `Graded ${result.total_submissions} submissions with average score of ${result.average_score}%`,
-            icon: '/logo192.png'
-          });
-        }
-      } else {
+      if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        addBotMessage(`❌ **Grading failed:** ${errorData.error || 'Unknown error'}\n\nPlease try again.`);
+        throw new Error(errorData.error || 'Failed to start grading');
       }
+
+      const startResult = await response.json();
+      addBotMessage(`🚀 **Grading Started!**\n\n⏳ Processing ${startResult.total_submissions || 'multiple'} submissions...\n\nThis may take 2-4 minutes. I'll notify you when it's complete!`);
+
+      // Poll for grading status
+      const pollStatus = async () => {
+        try {
+          const statusResponse = await fetch(`http://localhost:5002/api/assignments/${assignmentId}/grading-status`);
+          if (statusResponse.ok) {
+            const status = await statusResponse.json();
+            
+            if (status.status === 'completed') {
+              // Grading complete!
+              setGradingProgress(100);
+              addBotMessage(`🎉 **Grading Complete!**\n\n✅ ${status.total_submissions} submissions graded\n📊 Average score: ${status.average_score}%\n\nCheck the analytics dashboard for detailed insights!`);
+              
+              // Show notification
+              if ('Notification' in window && Notification.permission === 'granted') {
+                new Notification('Grading Complete!', {
+                  body: `Graded ${status.total_submissions} submissions with average score of ${status.average_score}%`,
+                  icon: '/logo192.png'
+                });
+              }
+              
+              setIsGrading(false);
+              setCurrentStep(0);
+              return;
+            } else if (status.status === 'processing') {
+              // Update progress
+              const progress = Math.min(status.progress_percentage || 0, 95);
+              setGradingProgress(progress);
+              
+              // Continue polling
+              setTimeout(pollStatus, 2000); // Poll every 2 seconds
+            } else {
+              throw new Error('Unexpected grading status: ' + status.status);
+            }
+          } else {
+            throw new Error('Failed to check grading status');
+          }
+        } catch (error) {
+          console.error('Status polling error:', error);
+          addBotMessage(`❌ **Status check failed:** ${error instanceof Error ? error.message : 'Unknown error'}\n\nGrading may still be in progress. Please refresh the page to check.`);
+          setIsGrading(false);
+          setCurrentStep(0);
+        }
+      };
+
+      // Start polling after a short delay
+      setTimeout(pollStatus, 1000);
+
     } catch (error) {
       console.error('Grading error:', error);
       addBotMessage(`❌ **Grading failed:** ${error instanceof Error ? error.message : 'Unknown error'}\n\nPlease try again.`);
+      setIsGrading(false);
+      setCurrentStep(0);
     }
-    
-    setIsGrading(false);
-    setCurrentStep(0);
   };
 
   // Keep the old function for backward compatibility (not used in current flow)
@@ -845,6 +975,24 @@ const SimpleDashboard: React.FC = () => {
                         </svg>
                       </motion.div>
                     </motion.button>
+                    
+                    {/* Clear Chat Button */}
+                    {(chatMessages.length > 0 || currentStep > 0) && (
+                      <motion.button
+                        type="button"
+                        onClick={clearChatbotState}
+                        className="px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 flex items-center space-x-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300"
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        transition={{ type: "spring", stiffness: 300 }}
+                        title="Clear chat and start over"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        <span>Clear</span>
+                      </motion.button>
+                    )}
                   </form>
                   
                   {/* Typing indicator */}
@@ -861,6 +1009,22 @@ const SimpleDashboard: React.FC = () => {
                         <div className="w-1 h-1 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
                       </div>
                       <span>Ready to send...</span>
+                    </motion.div>
+                  )}
+                  
+                  {/* State Saved Indicator */}
+                  {isStateSaved && (
+                    <motion.div 
+                      className="mt-2 text-xs text-green-600 dark:text-green-400 flex items-center space-x-2"
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 10 }}
+                      transition={{ delay: 0.1 }}
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span>Progress saved</span>
                     </motion.div>
                   )}
                 </motion.div>
@@ -915,26 +1079,75 @@ const SimpleDashboard: React.FC = () => {
                 )}
 
 
-                {/* Grading Progress */}
-                {isGrading && (
+                {/* Upload Progress */}
+                {isUploading && (
                   <motion.div 
-                    className="mt-4 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800"
+                    className="mt-4 p-4 bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-900/20 dark:to-blue-900/20 rounded-lg border border-green-200 dark:border-green-800"
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.2 }}
                   >
-                    <div className="text-sm font-medium text-purple-800 dark:text-purple-200 mb-2">
-                      🎯 Grading in Progress...
-              </div>
-                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div className="flex items-center space-x-2 mb-3">
+                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-green-500 border-t-transparent"></div>
+                      <div className="text-sm font-medium text-green-800 dark:text-green-200">
+                        📁 Uploading & Processing ZIP File...
+                      </div>
+                    </div>
+                    
+                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3 mb-2">
                       <div 
-                        className="bg-purple-500 h-2 rounded-full transition-all duration-300"
+                        className="bg-gradient-to-r from-green-500 to-blue-500 h-3 rounded-full transition-all duration-500 ease-out"
+                        style={{ width: `${uploadProgress}%` }}
+                      ></div>
+                    </div>
+                    
+                    <div className="flex justify-between items-center text-xs text-green-600 dark:text-green-300">
+                      <span>{uploadProgress}% Complete</span>
+                      <span className="text-gray-500 dark:text-gray-400">
+                        {uploadProgress < 50 ? 'Uploading ZIP file...' : 
+                         uploadProgress < 80 ? 'Extracting Python files...' : 
+                         'Generating solution & grading...'}
+                      </span>
+                    </div>
+                    
+                    <div className="mt-2 text-xs text-gray-600 dark:text-gray-400">
+                      💡 This process includes uploading, extracting, and AI grading
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Grading Progress */}
+                {isGrading && (
+                  <motion.div 
+                    className="mt-4 p-4 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 rounded-lg border border-purple-200 dark:border-purple-800"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2 }}
+                  >
+                    <div className="flex items-center space-x-2 mb-3">
+                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-purple-500 border-t-transparent"></div>
+                      <div className="text-sm font-medium text-purple-800 dark:text-purple-200">
+                        🤖 AI Grading in Progress...
+                      </div>
+                    </div>
+                    
+                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3 mb-2">
+                      <div 
+                        className="bg-gradient-to-r from-purple-500 to-blue-500 h-3 rounded-full transition-all duration-500 ease-out"
                         style={{ width: `${gradingProgress}%` }}
                       ></div>
-            </div>
-                    <div className="text-xs text-purple-600 dark:text-purple-300 mt-1">
-                      {gradingProgress}% Complete
-          </div>
+                    </div>
+                    
+                    <div className="flex justify-between items-center text-xs text-purple-600 dark:text-purple-300">
+                      <span>{gradingProgress}% Complete</span>
+                      <span className="text-gray-500 dark:text-gray-400">
+                        {gradingProgress < 100 ? 'Processing submissions...' : 'Finalizing results...'}
+                      </span>
+                    </div>
+                    
+                    <div className="mt-2 text-xs text-gray-600 dark:text-gray-400">
+                      💡 This process typically takes 2-4 minutes for multiple submissions
+                    </div>
                   </motion.div>
                 )}
 

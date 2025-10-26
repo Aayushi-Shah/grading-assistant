@@ -467,6 +467,44 @@ def grade_assignment_async(assignment_id):
     except Exception as e:
         return jsonify({'error': f'Failed to start grading: {str(e)}'}), 500
 
+@main_bp.route('/api/assignments/<int:assignment_id>/grading-status', methods=['GET'])
+def get_grading_status(assignment_id):
+    """
+    Check the grading status for an assignment
+    """
+    try:
+        # Get the latest grading report for this assignment
+        latest_report = GradingReport.query.filter_by(assignment_id=assignment_id).order_by(GradingReport.created_at.desc()).first()
+        
+        if not latest_report:
+            return jsonify({
+                'status': 'not_started',
+                'message': 'No grading has been started for this assignment'
+            }), 200
+        
+        # Check if grading is complete
+        if latest_report.graded_submissions == latest_report.total_submissions:
+            return jsonify({
+                'status': 'completed',
+                'message': 'Grading completed successfully',
+                'report_id': latest_report.id,
+                'total_submissions': latest_report.total_submissions,
+                'graded_submissions': latest_report.graded_submissions,
+                'average_score': latest_report.average_score
+            }), 200
+        else:
+            return jsonify({
+                'status': 'processing',
+                'message': 'Grading in progress',
+                'report_id': latest_report.id,
+                'total_submissions': latest_report.total_submissions,
+                'graded_submissions': latest_report.graded_submissions,
+                'progress_percentage': (latest_report.graded_submissions / latest_report.total_submissions) * 100 if latest_report.total_submissions > 0 else 0
+            }), 200
+            
+    except Exception as e:
+        return jsonify({'error': f'Failed to get grading status: {str(e)}'}), 500
+
 @main_bp.route('/api/grading-reports/<int:report_id>', methods=['GET'])
 def get_grading_report(report_id):
     """
