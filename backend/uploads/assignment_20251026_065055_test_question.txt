@@ -1,0 +1,1 @@
+Write a Python program that calculates the shipping cost based on item price.

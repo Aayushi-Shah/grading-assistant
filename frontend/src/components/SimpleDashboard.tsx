@@ -126,7 +126,8 @@ const SimpleDashboard: React.FC = () => {
     file: null as File | null,
     solution: '',
     rubrics: '',
-    maxPoints: 100
+    maxPoints: 100,
+    assignmentId: null as number | null
   });
 
   const [isGeneratingSolution, setIsGeneratingSolution] = useState(false);
@@ -339,7 +340,7 @@ const SimpleDashboard: React.FC = () => {
 
       if (solutionResponse.ok) {
         const result = await solutionResponse.json();
-        setAssignmentData(prev => ({ ...prev, solution: result.solution, file: fileToUpload || prev.file }));
+        setAssignmentData(prev => ({ ...prev, solution: result.solution, file: fileToUpload || prev.file, assignmentId: result.assignment_id }));
         
         // Show success message with file info
         const fileToShow = fileToUpload || assignmentData.file;
@@ -348,6 +349,8 @@ const SimpleDashboard: React.FC = () => {
         const solutionInfo = result.solution_length ? `\n🤖 **Solution generated:** ${result.solution_length} characters` : '';
         
         addBotMessage(`✅ **Solution Generated Successfully!**\n\nI've created a reference solution based on your assignment.${fileInfo}${contentInfo}${solutionInfo}\n\nPlease review it and let me know if you'd like any changes.`);
+        console.log('🔍 DEBUG: Setting showSolutionModal to true');
+        console.log('🔍 DEBUG: Solution content:', result.solution);
         setShowSolutionModal(true);
       } else {
         const errorData = await solutionResponse.json().catch(() => ({}));
@@ -390,36 +393,65 @@ const SimpleDashboard: React.FC = () => {
   };
 
   const handleStudentSubmissionsUpload = async (file: File) => {
-    addBotMessage(`📁 **Student Submissions Uploaded!**\n\nStarting grading process with the approved solution and student submissions...`);
+    addBotMessage(`📁 **Student Submissions Uploaded!**\n\nFile: ${file.name} (${(file.size / 1024).toFixed(1)}KB)\n\nNow uploading student submissions and starting grading process...`);
     
-    // Start grading with default rubrics and points
-    const rubrics = "Code quality, correctness, efficiency, and adherence to requirements";
-    const maxPoints = 100;
-    
-    await startGrading(rubrics, maxPoints);
+    try {
+      // Check if we have a valid assignment ID
+      if (!assignmentData.assignmentId) {
+        throw new Error('No assignment ID found. Please start the workflow from the beginning.');
+      }
+      
+      console.log('🔍 DEBUG: Uploading ZIP to assignment ID:', assignmentData.assignmentId);
+      
+      // Upload the student submissions ZIP file to the assignment
+      const uploadFormData = new FormData();
+      uploadFormData.append('file', file);
+      
+      const uploadResponse = await fetch(`/api/assignments/${assignmentData.assignmentId}/upload`, {
+        method: 'POST',
+        body: uploadFormData
+      });
+      
+      if (!uploadResponse.ok) {
+        const errorText = await uploadResponse.text();
+        console.error('❌ Upload failed:', uploadResponse.status, errorText);
+        throw new Error(`Upload failed: ${uploadResponse.status} - ${errorText}`);
+      }
+      
+      const uploadResult = await uploadResponse.json();
+      console.log('✅ Upload successful:', uploadResult);
+      
+      addBotMessage(`✅ **Student submissions uploaded successfully!**\n\n🤖 **AI grading has started automatically in the background!**\n\nYou'll see the results once grading is complete. The system will:\n• Extract all Python files from the ZIP\n• Generate a reference solution using AI\n• Grade each student submission\n• Save results to the database\n\nCheck back in a few minutes for the complete grading report!`);
+      
+      // Reset workflow
+      setCurrentStep(0);
+      
+    } catch (error) {
+      console.error('Upload error:', error);
+      addBotMessage(`❌ **Error uploading student submissions:** ${error instanceof Error ? error.message : 'Unknown error'}\n\nPlease try again.`);
+    }
   };
 
-  const startGrading = async (rubrics: string, maxPoints: number) => {
+  const startGradingWithAssignment = async (assignmentId: number, rubrics: string, maxPoints: number) => {
     setIsGrading(true);
     setGradingProgress(0);
     
     try {
-      const formData = new FormData();
-      formData.append('assignment_id', 'new'); // Will be created
-      formData.append('rubric', rubrics);
-      formData.append('max_points', maxPoints.toString());
-      formData.append('title', assignmentData.title);
-      formData.append('description', assignmentData.description);
-      formData.append('solution', assignmentData.solution);
-
       // Simulate progress updates
       const progressInterval = setInterval(() => {
         setGradingProgress(prev => Math.min(prev + 10, 90));
       }, 1000);
 
-      const response = await fetch('/api/grade-assignment-new', {
+      // Call the proper grading API endpoint
+      const response = await fetch(`/api/assignments/${assignmentId}/grade`, {
         method: 'POST',
-        body: formData
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          rubric: rubrics,
+          max_points: maxPoints
+        })
       });
 
       clearInterval(progressInterval);
@@ -437,14 +469,21 @@ const SimpleDashboard: React.FC = () => {
           });
         }
       } else {
-        addBotMessage(`❌ **Grading failed.** Please try again.`);
+        const errorData = await response.json().catch(() => ({}));
+        addBotMessage(`❌ **Grading failed:** ${errorData.error || 'Unknown error'}\n\nPlease try again.`);
       }
     } catch (error) {
-      addBotMessage(`❌ **Grading failed.** Please try again.`);
+      console.error('Grading error:', error);
+      addBotMessage(`❌ **Grading failed:** ${error instanceof Error ? error.message : 'Unknown error'}\n\nPlease try again.`);
     }
     
     setIsGrading(false);
     setCurrentStep(0);
+  };
+
+  // Keep the old function for backward compatibility (not used in current flow)
+  const startGrading = async (rubrics: string, maxPoints: number) => {
+    addBotMessage(`❌ **This grading method is deprecated.** Please use the new workflow with file uploads.`);
   };
 
   const handleChatSubmit = (e: React.FormEvent) => {

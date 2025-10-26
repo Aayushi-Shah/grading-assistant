@@ -28,7 +28,7 @@ echo "📦 Starting Integrated Backend + Frontend Server..."
 echo "=================================================="
 
 # Start the integrated server
-cd /Users/aayushi/PSU/MyWork/grading-assistant/backend
+cd /Users/ritamghosh/Desktop/grading-assistant/backend
 source venv/bin/activate
 python3 app.py &
 SERVER_PID=$!
