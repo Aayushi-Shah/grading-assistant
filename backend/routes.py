@@ -784,3 +784,95 @@ def send_notification():
         
     except Exception as e:
         return jsonify({'error': f'Failed to send notification: {str(e)}'}), 500
+
+@main_bp.route('/api/assignments/<int:assignment_id>/grades', methods=['GET'])
+def get_assignment_grades(assignment_id):
+    """
+    Get all student grades for a specific assignment
+    """
+    try:
+        # Get the assignment
+        assignment = Assignment.query.get_or_404(assignment_id)
+        
+        # Get all submission results for this assignment
+        submissions = SubmissionResult.query.filter_by(assignment_id=assignment_id).all()
+        
+        # Format the data
+        grades_data = []
+        for submission in submissions:
+            grades_data.append({
+                'student_name': submission.student_name,
+                'score': submission.score,
+                'max_points': assignment.max_points,
+                'percentage': round((submission.score / assignment.max_points) * 100, 2),
+                'feedback': submission.feedback,
+                'submission_path': submission.submission_path,
+                'graded_at': submission.graded_at.isoformat() if submission.graded_at else None
+            })
+        
+        return jsonify({
+            'success': True,
+            'assignment_id': assignment_id,
+            'assignment_title': assignment.title,
+            'max_points': assignment.max_points,
+            'total_submissions': len(grades_data),
+            'grades': grades_data
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': f'Failed to get grades: {str(e)}'}), 500
+
+@main_bp.route('/api/assignments/<int:assignment_id>/download-csv', methods=['GET'])
+def download_assignment_csv(assignment_id):
+    """
+    Download CSV file with all student grades for a specific assignment
+    """
+    try:
+        import csv
+        import io
+        from flask import make_response
+        
+        # Get the assignment
+        assignment = Assignment.query.get_or_404(assignment_id)
+        
+        # Get all submission results for this assignment
+        submissions = SubmissionResult.query.filter_by(assignment_id=assignment_id).all()
+        
+        # Create CSV content
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Write header
+        writer.writerow([
+            'Student Name',
+            'Score',
+            'Max Points',
+            'Percentage',
+            'Feedback',
+            'Graded At'
+        ])
+        
+        # Write data rows
+        for submission in submissions:
+            percentage = round((submission.score / assignment.max_points) * 100, 2)
+            graded_at = submission.graded_at.strftime('%Y-%m-%d %H:%M:%S') if submission.graded_at else 'N/A'
+            
+            writer.writerow([
+                submission.student_name,
+                submission.score,
+                assignment.max_points,
+                f"{percentage}%",
+                submission.feedback,
+                graded_at
+            ])
+        
+        # Create response
+        output.seek(0)
+        response = make_response(output.getvalue())
+        response.headers['Content-Type'] = 'text/csv'
+        response.headers['Content-Disposition'] = f'attachment; filename=assignment_{assignment_id}_grades.csv'
+        
+        return response
+        
+    except Exception as e:
+        return jsonify({'error': f'Failed to generate CSV: {str(e)}'}), 500

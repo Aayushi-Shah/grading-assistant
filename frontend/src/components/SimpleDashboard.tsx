@@ -37,7 +37,12 @@ interface ChatMessage {
 }
 
 // Memoized Assignment Card Component to prevent unnecessary re-renders
-const AssignmentCard = React.memo(({ assignment, index }: { assignment: Assignment; index: number }) => {
+const AssignmentCard = React.memo(({ assignment, index, onViewGrades, onDownloadCSV }: { 
+  assignment: Assignment; 
+  index: number;
+  onViewGrades: (assignment: Assignment) => void;
+  onDownloadCSV: (assignment: Assignment) => void;
+}) => {
   return (
     <motion.div 
       key={assignment.id} 
@@ -88,6 +93,10 @@ const AssignmentCard = React.memo(({ assignment, index }: { assignment: Assignme
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onViewGrades(assignment);
+            }}
             className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-lg text-xs font-medium flex items-center space-x-1 transition-colors"
           >
             <Eye className="w-3 h-3" />
@@ -97,6 +106,10 @@ const AssignmentCard = React.memo(({ assignment, index }: { assignment: Assignme
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDownloadCSV(assignment);
+            }}
             className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-lg text-xs font-medium flex items-center space-x-1 transition-colors"
           >
             <Download className="w-3 h-3" />
@@ -139,6 +152,12 @@ const SimpleDashboard: React.FC = () => {
   const [solutionChangeCount, setSolutionChangeCount] = useState(0);
   const [isStateSaved, setIsStateSaved] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null); // Ref for auto-scrolling
+  
+  // Grade viewing state
+  const [showGradesModal, setShowGradesModal] = useState(false);
+  const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
+  const [gradesData, setGradesData] = useState<any[]>([]);
+  const [isLoadingGrades, setIsLoadingGrades] = useState(false);
 
   // State persistence functions
   const saveChatbotState = () => {
@@ -219,6 +238,55 @@ const SimpleDashboard: React.FC = () => {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
     } else {
       console.log('❌ DEBUG: messagesEndRef.current is null');
+    }
+  };
+
+  // Handle viewing grades
+  const handleViewGrades = async (assignment: Assignment) => {
+    setIsLoadingGrades(true);
+    setSelectedAssignment(assignment);
+    
+    try {
+      const response = await fetch(`http://localhost:5002/api/assignments/${assignment.id}/grades`);
+      if (response.ok) {
+        const data = await response.json();
+        setGradesData(data.grades || []);
+        setShowGradesModal(true);
+      } else {
+        console.error('Failed to fetch grades:', response.status);
+        addBotMessage(`❌ **Error loading grades:** Failed to fetch grades for assignment "${assignment.title}". Please try again.`);
+      }
+    } catch (error) {
+      console.error('Error fetching grades:', error);
+      addBotMessage(`❌ **Error loading grades:** ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`);
+    } finally {
+      setIsLoadingGrades(false);
+    }
+  };
+
+  // Handle downloading CSV
+  const handleDownloadCSV = async (assignment: Assignment) => {
+    try {
+      const response = await fetch(`http://localhost:5002/api/assignments/${assignment.id}/download-csv`);
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `assignment_${assignment.id}_grades.csv`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        addBotMessage(`✅ **CSV Downloaded Successfully!**\n\n📊 **Assignment:** ${assignment.title}\n📁 **File:** assignment_${assignment.id}_grades.csv\n\nThe file contains all student grades and feedback for this assignment.`);
+      } else {
+        console.error('Failed to download CSV:', response.status);
+        addBotMessage(`❌ **Error downloading CSV:** Failed to generate CSV for assignment "${assignment.title}". Please try again.`);
+      }
+    } catch (error) {
+      console.error('Error downloading CSV:', error);
+      addBotMessage(`❌ **Error downloading CSV:** ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`);
     }
   };
 
@@ -784,16 +852,7 @@ const SimpleDashboard: React.FC = () => {
                 >
                   Welcome, {professor?.name || 'Dr. Smith'}!
                 </motion.h2>
-                {professor && (
-                  <motion.div 
-                    className="text-sm text-blue-200 mb-2"
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 1.2 }}
-                  >
-                    ID: {professor.id} • {professor.department}
-                  </motion.div>
-                )}
+                
                 <motion.p 
                   className="text-lg text-blue-100"
                   initial={{ opacity: 0 }}
@@ -943,6 +1002,79 @@ const SimpleDashboard: React.FC = () => {
                       </motion.div>
                     </motion.div>
                   ))}
+                  
+                  {/* Solution Generation Loader */}
+                  {isGeneratingSolution && (
+                    <motion.div 
+                      className="flex justify-start"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <motion.div 
+                        className="bg-white/80 dark:bg-gray-700/80 text-gray-800 dark:text-gray-200 border border-gray-200/50 dark:border-gray-600/50 rounded-2xl shadow-lg px-4 py-3 max-w-xs"
+                        whileHover={{ scale: 1.02 }}
+                        transition={{ type: "spring", stiffness: 300 }}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <div className="flex space-x-1">
+                            <motion.div
+                              className="w-2 h-2 bg-blue-500 rounded-full"
+                              animate={{ scale: [1, 1.2, 1] }}
+                              transition={{ duration: 0.6, repeat: Infinity, delay: 0 }}
+                            />
+                            <motion.div
+                              className="w-2 h-2 bg-blue-500 rounded-full"
+                              animate={{ scale: [1, 1.2, 1] }}
+                              transition={{ duration: 0.6, repeat: Infinity, delay: 0.2 }}
+                            />
+                            <motion.div
+                              className="w-2 h-2 bg-blue-500 rounded-full"
+                              animate={{ scale: [1, 1.2, 1] }}
+                              transition={{ duration: 0.6, repeat: Infinity, delay: 0.4 }}
+                            />
+                          </div>
+                          <span className="text-sm font-medium">🤖 AI is generating solution...</span>
+                        </div>
+                        <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                          This may take 10-30 seconds
+                        </div>
+                      </motion.div>
+                    </motion.div>
+                  )}
+                  
+                  {/* Grading Progress Loader */}
+                  {isGrading && (
+                    <motion.div 
+                      className="flex justify-start"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <motion.div 
+                        className="bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-900/20 dark:to-blue-900/20 text-gray-800 dark:text-gray-200 border border-green-200 dark:border-green-800 rounded-2xl shadow-lg px-4 py-3 max-w-xs"
+                        whileHover={{ scale: 1.02 }}
+                        transition={{ type: "spring", stiffness: 300 }}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <div className="animate-spin rounded-full h-4 w-4 border-2 border-green-500 border-t-transparent"></div>
+                          <span className="text-sm font-medium">📊 Grading submissions...</span>
+                        </div>
+                        <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                          Progress: {Math.round(gradingProgress)}%
+                        </div>
+                        <div className="mt-2 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                          <motion.div 
+                            className="bg-gradient-to-r from-green-500 to-blue-500 h-2 rounded-full"
+                            initial={{ width: 0 }}
+                            animate={{ width: `${gradingProgress}%` }}
+                            transition={{ duration: 0.5 }}
+                          />
+                        </div>
+                      </motion.div>
+                    </motion.div>
+                  )}
+                  
                   {/* Auto-scroll anchor - positioned right after the last message */}
                   <div ref={messagesEndRef} />
                 </div>
@@ -1229,6 +1361,8 @@ const SimpleDashboard: React.FC = () => {
                         key={assignment.id}
                         assignment={assignment}
                         index={index}
+                        onViewGrades={handleViewGrades}
+                        onDownloadCSV={handleDownloadCSV}
                       />
                     ))}
                   </div>
@@ -1314,6 +1448,148 @@ const SimpleDashboard: React.FC = () => {
                 Cancel
               </button>
           </div>
+          </motion.div>
+        </motion.div>
+      )}
+
+      {/* Grades Modal */}
+      {showGradesModal && selectedAssignment && (
+        <motion.div 
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={() => setShowGradesModal(false)}
+        >
+          <motion.div 
+            className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[80vh] overflow-hidden"
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold">Student Grades</h2>
+                  <p className="text-blue-100 mt-1">{selectedAssignment.title}</p>
+                </div>
+                <button
+                  onClick={() => setShowGradesModal(false)}
+                  className="text-white/80 hover:text-white transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 max-h-[60vh] overflow-y-auto">
+              {isLoadingGrades ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-500 border-t-transparent"></div>
+                  <span className="ml-3 text-gray-600 dark:text-gray-300">Loading grades...</span>
+                </div>
+              ) : gradesData.length > 0 ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                    <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
+                      <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{gradesData.length}</div>
+                      <div className="text-sm text-blue-600 dark:text-blue-400">Total Submissions</div>
+                    </div>
+                    <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg">
+                      <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                        {Math.round(gradesData.reduce((sum, grade) => sum + grade.percentage, 0) / gradesData.length)}%
+                      </div>
+                      <div className="text-sm text-green-600 dark:text-green-400">Average Score</div>
+                    </div>
+                    <div className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-lg">
+                      <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                        {gradesData.filter(grade => grade.percentage >= 80).length}
+                      </div>
+                      <div className="text-sm text-purple-600 dark:text-purple-400">A Grades (80%+)</div>
+                    </div>
+                    <div className="bg-orange-50 dark:bg-orange-900/20 p-4 rounded-lg">
+                      <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+                        {gradesData.filter(grade => grade.percentage < 60).length}
+                      </div>
+                      <div className="text-sm text-orange-600 dark:text-orange-400">Below 60%</div>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-200 dark:border-gray-700">
+                          <th className="text-left py-3 px-4 font-semibold text-gray-900 dark:text-white">Student</th>
+                          <th className="text-center py-3 px-4 font-semibold text-gray-900 dark:text-white">Score</th>
+                          <th className="text-center py-3 px-4 font-semibold text-gray-900 dark:text-white">Percentage</th>
+                          <th className="text-left py-3 px-4 font-semibold text-gray-900 dark:text-white">Feedback</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {gradesData.map((grade, index) => (
+                          <tr key={index} className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                            <td className="py-3 px-4 font-medium text-gray-900 dark:text-white">
+                              {grade.student_name}
+                            </td>
+                            <td className="py-3 px-4 text-center text-gray-600 dark:text-gray-300">
+                              {grade.score}/{grade.max_points}
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                grade.percentage >= 80 ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400' :
+                                grade.percentage >= 70 ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400' :
+                                grade.percentage >= 60 ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400' :
+                                'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400'
+                              }`}>
+                                {grade.percentage}%
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-gray-600 dark:text-gray-300 max-w-xs truncate">
+                              {grade.feedback}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <div className="text-gray-400 dark:text-gray-500 mb-4">
+                    <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">No Grades Available</h3>
+                  <p className="text-gray-600 dark:text-gray-300">This assignment hasn't been graded yet.</p>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="bg-gray-50 dark:bg-gray-700/50 px-6 py-4 flex justify-end space-x-3">
+              <button
+                onClick={() => setShowGradesModal(false)}
+                className="px-4 py-2 text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-white transition-colors"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => {
+                  handleDownloadCSV(selectedAssignment);
+                  setShowGradesModal(false);
+                }}
+                className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors flex items-center space-x-2"
+              >
+                <Download className="w-4 h-4" />
+                <span>Download CSV</span>
+              </button>
+            </div>
           </motion.div>
         </motion.div>
       )}
