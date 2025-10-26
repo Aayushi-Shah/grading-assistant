@@ -28,6 +28,33 @@ class Professor(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 
+class Subject(db.Model):
+    __tablename__ = 'subjects'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    code = db.Column(db.String(20), unique=True, nullable=False)  # e.g., "CS101", "MATH201"
+    description = db.Column(Text)
+    professor_id = db.Column(db.Integer, db.ForeignKey('professors.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    professor = db.relationship('Professor', backref='subjects')
+    assignments = db.relationship('Assignment', backref='subject', lazy=True, cascade='all, delete-orphan')
+    
+    def __repr__(self):
+        return f'<Subject {self.code}: {self.name}>'
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'code': self.code,
+            'description': self.description,
+            'professor_id': self.professor_id,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
 class Assignment(db.Model):
     __tablename__ = 'assignments'
     
@@ -37,6 +64,7 @@ class Assignment(db.Model):
     due_date = db.Column(db.DateTime)
     max_points = db.Column(db.Integer, default=100)
     professor_id = db.Column(db.Integer, db.ForeignKey('professors.id'), nullable=False)
+    subject_id = db.Column(db.Integer, db.ForeignKey('subjects.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # File paths for uploaded assignments
@@ -65,6 +93,8 @@ class Assignment(db.Model):
             'due_date': self.due_date.isoformat() if self.due_date else None,
             'max_points': self.max_points,
             'professor_id': self.professor_id,
+            'subject_id': self.subject_id,
+            'subject': self.subject.to_dict() if self.subject else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'zip_file_path': self.zip_file_path,
             'extracted_folder_path': self.extracted_folder_path,

@@ -2,7 +2,7 @@ from flask import Flask, send_from_directory, send_file
 from flask_migrate import Migrate
 from flask_cors import CORS
 from config import Config
-from models import db, Professor, Assignment, GradingReport, SubmissionResult
+from models import db, Professor, Assignment, GradingReport, SubmissionResult, Subject
 import os
 
 # Initialize Flask app

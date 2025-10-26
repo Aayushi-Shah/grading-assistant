@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, current_app
-from models import db, Professor, Assignment, GradingReport, SubmissionResult
+from models import db, Professor, Assignment, GradingReport, SubmissionResult, Subject
 import os
 import zipfile
 import shutil
@@ -214,6 +214,48 @@ def professor(professor_id):
         db.session.commit()
         return '', 204
 
+@main_bp.route('/api/subjects', methods=['GET', 'POST'])
+def subjects():
+    if request.method == 'GET':
+        professor_id = request.args.get('professor_id')
+        if professor_id:
+            subjects = Subject.query.filter_by(professor_id=professor_id).all()
+        else:
+            subjects = Subject.query.all()
+        return jsonify([subject.to_dict() for subject in subjects])
+    
+    elif request.method == 'POST':
+        data = request.get_json()
+        subject = Subject(
+            name=data['name'],
+            code=data['code'],
+            description=data.get('description'),
+            professor_id=data['professor_id']
+        )
+        db.session.add(subject)
+        db.session.commit()
+        return jsonify(subject.to_dict()), 201
+
+@main_bp.route('/api/subjects/<int:subject_id>', methods=['GET', 'PUT', 'DELETE'])
+def subject(subject_id):
+    subject = Subject.query.get_or_404(subject_id)
+    
+    if request.method == 'GET':
+        return jsonify(subject.to_dict())
+    
+    elif request.method == 'PUT':
+        data = request.get_json()
+        subject.name = data.get('name', subject.name)
+        subject.code = data.get('code', subject.code)
+        subject.description = data.get('description', subject.description)
+        db.session.commit()
+        return jsonify(subject.to_dict())
+    
+    elif request.method == 'DELETE':
+        db.session.delete(subject)
+        db.session.commit()
+        return jsonify({'message': 'Subject deleted successfully'}), 200
+
 @main_bp.route('/api/assignments', methods=['GET', 'POST'])
 def assignments():
     if request.method == 'GET':
@@ -227,7 +269,8 @@ def assignments():
             description=data.get('description'),
             due_date=datetime.fromisoformat(data['due_date']) if data.get('due_date') else None,
             max_points=data.get('max_points', 100),
-            professor_id=data['professor_id']
+            professor_id=data['professor_id'],
+            subject_id=data.get('subject_id', 1)  # Default to subject 1 if not provided
         )
         db.session.add(assignment)
         db.session.commit()
@@ -528,6 +571,9 @@ def upload_question_file():
     try:
         title = request.form.get('title')
         description = request.form.get('description')
+        professor_id = request.form.get('professor_id', 1)
+        subject_id = request.form.get('subject_id', 1)
+        max_points = request.form.get('max_points', 100)
         file = request.files.get('file')
         
         if not title:
@@ -564,8 +610,9 @@ def upload_question_file():
             title=title,
             description=description,
             question_file_path=file_path,
-            professor_id=1,  # Default professor for now
-            max_points=100
+            professor_id=int(professor_id),
+            subject_id=int(subject_id),
+            max_points=int(max_points)
         )
         
         db.session.add(assignment)

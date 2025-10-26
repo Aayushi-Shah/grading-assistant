@@ -21,6 +21,15 @@ interface Professor {
   department: string;
 }
 
+interface Subject {
+  id: number;
+  name: string;
+  code: string;
+  description?: string;
+  professor_id: number;
+  created_at: string;
+}
+
 interface Assignment {
   id: number;
   title: string;
@@ -28,6 +37,8 @@ interface Assignment {
   due_date: string;
   max_points: number;
   professor_id: number;
+  subject_id: number;
+  subject?: Subject;
   created_at: string;
   average_score?: number; // Optional average score for the assignment
   is_graded?: boolean; // Whether the assignment has been graded
@@ -102,6 +113,11 @@ const AssignmentCard = React.memo(({ assignment, index, onViewGrades, onDownload
                 <h4 className="text-lg font-bold text-slate-800 dark:text-white truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors duration-300">
               {assignment.title}
             </h4>
+                {assignment.subject && (
+                  <div className="text-sm text-slate-600 dark:text-slate-400 font-medium">
+                    {assignment.subject.code} - {assignment.subject.name}
+                  </div>
+                )}
                 <div className="flex items-center space-x-2 mt-1">
                   <div className={`w-2 h-2 rounded-full ${assignment.is_graded ? 'bg-emerald-500' : 'bg-amber-500'} shadow-sm`}></div>
                   <span className={`text-xs font-semibold ${assignment.is_graded ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
@@ -179,6 +195,8 @@ const AssignmentCard = React.memo(({ assignment, index, onViewGrades, onDownload
 const SimpleDashboard: React.FC = () => {
   const [professor, setProfessor] = useState<Professor | null>(null);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
   
   // Memoize assignments to prevent unnecessary re-renders
   const memoizedAssignments = useMemo(() => assignments, [assignments]);
@@ -415,6 +433,28 @@ const SimpleDashboard: React.FC = () => {
     averageScore: classAverage
   }), [assignments.length, classAverage]);
 
+  // Fetch subjects for the professor
+  const fetchSubjects = useCallback(async () => {
+    if (!professor) return;
+    
+    try {
+      const response = await fetch(`http://localhost:5002/api/subjects?professor_id=${professor.id}`);
+      if (response.ok) {
+        const subjectsData = await response.json();
+        setSubjects(subjectsData);
+        
+        // Set the first subject as selected by default
+        if (subjectsData.length > 0 && !selectedSubject) {
+          setSelectedSubject(subjectsData[0]);
+        }
+      } else {
+        console.error('Error fetching subjects:', response.status);
+      }
+    } catch (error) {
+      console.error('Error fetching subjects:', error);
+    }
+  }, [professor, selectedSubject]);
+
   // Fetch class average from API
   // Helper function to fetch and sort assignments by creation date (newest first)
   const fetchAssignmentsSorted = useCallback(async () => {
@@ -423,9 +463,14 @@ const SimpleDashboard: React.FC = () => {
       if (response.ok) {
         const assignmentsData = await response.json();
         
+        // Filter assignments by selected subject
+        const filteredAssignments = selectedSubject 
+          ? assignmentsData.filter((assignment: Assignment) => assignment.subject_id === selectedSubject.id)
+          : assignmentsData;
+        
         // Check graded status for each assignment using the average API
         const assignmentsWithStatus = await Promise.all(
-          assignmentsData.map(async (assignment: Assignment) => {
+          filteredAssignments.map(async (assignment: Assignment) => {
             try {
               const averageResponse = await fetch(`http://localhost:5002/api/assignments/${assignment.id}/average`);
               if (averageResponse.ok) {
@@ -434,7 +479,8 @@ const SimpleDashboard: React.FC = () => {
                 console.log(`🔍 Assignment ${assignment.id} (${assignment.title}): average_score=${averageData.average_score}, is_graded=${isGraded}`);
                 return {
                   ...assignment,
-                  is_graded: isGraded
+                  is_graded: isGraded,
+                  average_score: averageData.average_score ? parseFloat(averageData.average_score.toFixed(2)) : null
                 };
               }
             } catch (error) {
@@ -442,7 +488,8 @@ const SimpleDashboard: React.FC = () => {
             }
             return {
               ...assignment,
-              is_graded: false
+              is_graded: false,
+              average_score: null
             };
           })
         );
@@ -461,18 +508,36 @@ const SimpleDashboard: React.FC = () => {
       console.error('Error fetching assignments:', error);
       return [];
     }
-  }, []);
+  }, [selectedSubject]);
 
   const fetchClassAverage = useCallback(async () => {
     setIsLoadingStats(true);
     try {
-      const response = await fetch('http://localhost:5002/api/class-average');
-      if (response.ok) {
-        const data = await response.json();
-        setClassAverage(data.class_average);
+      // Calculate class average based on selected subject's assignments
+      if (selectedSubject && assignments.length > 0) {
+        const gradedAssignments = assignments.filter(assignment => 
+          assignment.subject_id === selectedSubject.id && assignment.average_score !== null
+        );
+        
+        if (gradedAssignments.length > 0) {
+          const totalScore = gradedAssignments.reduce((sum, assignment) => 
+            sum + (assignment.average_score || 0), 0
+          );
+          const average = totalScore / gradedAssignments.length;
+          setClassAverage(parseFloat(average.toFixed(2)));
+        } else {
+          setClassAverage(null);
+        }
       } else {
-        console.error('Failed to fetch class average:', response.status);
-        setClassAverage(null);
+        // Fallback to API if no subject selected or no assignments
+        const response = await fetch('http://localhost:5002/api/class-average');
+        if (response.ok) {
+          const data = await response.json();
+          setClassAverage(data.class_average);
+        } else {
+          console.error('Failed to fetch class average:', response.status);
+          setClassAverage(null);
+        }
       }
     } catch (error) {
       console.error('Error fetching class average:', error);
@@ -480,7 +545,7 @@ const SimpleDashboard: React.FC = () => {
     } finally {
       setIsLoadingStats(false);
     }
-  }, []);
+  }, [selectedSubject, assignments]);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme');
@@ -515,10 +580,24 @@ const SimpleDashboard: React.FC = () => {
     }
   }, [assignments.length]);
 
-  // Fetch class average when component mounts
+  // Fetch class average when component mounts or assignments change
   useEffect(() => {
     fetchClassAverage();
-  }, [fetchClassAverage]);
+  }, [fetchClassAverage, assignments]);
+
+  // Fetch subjects when professor changes
+  useEffect(() => {
+    if (professor) {
+      fetchSubjects();
+    }
+  }, [professor, fetchSubjects]);
+
+  // Fetch assignments when selected subject changes
+  useEffect(() => {
+    if (selectedSubject) {
+      fetchAssignmentsSorted();
+    }
+  }, [selectedSubject, fetchAssignmentsSorted]);
 
   // Fetch assignment averages when assignments change
   useEffect(() => {
@@ -823,6 +902,7 @@ const SimpleDashboard: React.FC = () => {
           formData.append('description', workflowData.assignmentName);
           formData.append('max_points', workflowData.maxPoints.toString());
           formData.append('professor_id', professor?.id.toString() || '1');
+          formData.append('subject_id', selectedSubject?.id.toString() || '1');
           if (workflowData.questionFile) {
             formData.append('file', workflowData.questionFile);
           }
@@ -898,6 +978,7 @@ const SimpleDashboard: React.FC = () => {
       formData.append('file', file);
       formData.append('max_points', workflowData.maxPoints.toString());
       formData.append('professor_id', professor?.id.toString() || '1');
+      formData.append('subject_id', selectedSubject?.id.toString() || '1');
 
       console.log('🔍 DEBUG: Uploading assignment with data:', {
         title: workflowData.assignmentName,
@@ -1003,6 +1084,9 @@ const SimpleDashboard: React.FC = () => {
       const formData = new FormData();
       formData.append('title', assignmentData.title);
       formData.append('description', assignmentData.description);
+      formData.append('max_points', '100'); // Default max points
+      formData.append('professor_id', professor?.id.toString() || '1');
+      formData.append('subject_id', selectedSubject?.id.toString() || '1');
         
         // Use the file parameter if provided, otherwise use the file from state
         const fileToUpload = file || assignmentData.file;
@@ -1248,7 +1332,8 @@ const SimpleDashboard: React.FC = () => {
       addBotMessage("📊 **CSV Downloads & Reports:**\n\n**Available Reports:**\n• **Grade Book Export** - Complete grading data\n• **Performance Analytics** - Student progress trends\n• **Submission Statistics** - Assignment completion rates\n• **Custom Reports** - Tailored analytics\n\n**How to Download:**\n1. Click 'Download CSV' on any assignment card\n2. Choose your preferred format\n3. Get instant download with detailed data\n\nPerfect for grade book integration and analysis!");
     } else if (userInput.includes('analytics') || userInput.includes('stats') || userInput.includes('performance')) {
       const averageText = stats.averageScore !== null ? stats.averageScore.toFixed(2) + "%" : "No grades yet";
-      addBotMessage("📈 **Analytics & Performance:**\n\n**Key Metrics Available:**\n• **Assignment Statistics** - Total assignments and performance\n• **Grade Distribution** - Performance across students\n• **Trend Analysis** - Progress over time\n• **Class Performance** - Overall class averages\n\n**Dashboard Overview:**\n• Total Assignments: " + stats.totalAssignments + "\n• Class Average: " + averageText + "\n\nClick on any assignment card for detailed analytics!");
+      const subjectText = selectedSubject ? ` for ${selectedSubject.code} - ${selectedSubject.name}` : "";
+      addBotMessage("📈 **Analytics & Performance" + subjectText + ":**\n\n**Key Metrics Available:**\n• **Assignment Statistics** - Total assignments and performance\n• **Grade Distribution** - Performance across students\n• **Trend Analysis** - Progress over time\n• **Class Performance** - Overall class averages\n\n**Dashboard Overview:**\n• Total Assignments: " + stats.totalAssignments + "\n• Class Average: " + averageText + "\n\nClick on any assignment card for detailed analytics!");
     } else if (userInput.includes('navigate') || userInput.includes('tour') || userInput.includes('around')) {
       addBotMessage("🗺️ **Dashboard Navigation Guide:**\n\n**Left Side - AI Assistant:**\n• Chat with me for help and support\n• Quick action buttons for common tasks\n• Assignment creation workflow\n\n**Right Side - Your Assignments:**\n• View all your assignments\n• Click cards for detailed information\n• Access submissions and analytics\n\n**Top Section - Overview:**\n• Welcome message with your info\n• Key statistics and metrics\n• Quick access to main features\n\n**Need help with anything specific?** Just ask!");
     } else if (userInput.includes('settings') || userInput.includes('preferences') || userInput.includes('theme')) {
@@ -1381,6 +1466,43 @@ const SimpleDashboard: React.FC = () => {
                 >
                   AI-Powered Grading Assistant
                 </motion.p>
+                
+                {/* Subject Selection Dropdown */}
+                {subjects.length > 0 && (
+                  <motion.div 
+                    className="mt-4"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 1.2 }}
+                  >
+                    <label className="block text-sm font-medium text-blue-200 mb-2">
+                      Select Subject:
+                    </label>
+                    <div className="relative">
+                      <select
+                        value={selectedSubject?.id || ''}
+                        onChange={(e) => {
+                          const subjectId = parseInt(e.target.value);
+                          const subject = subjects.find(s => s.id === subjectId);
+                          setSelectedSubject(subject || null);
+                        }}
+                        className="bg-white/20 backdrop-blur-sm border border-white/30 rounded-lg px-4 py-2 pr-10 text-white focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent appearance-none cursor-pointer w-full"
+                      >
+                        {subjects.map((subject) => (
+                          <option key={subject.id} value={subject.id} className="text-gray-800">
+                            {subject.code} - {subject.name}
+                          </option>
+                        ))}
+                      </select>
+                      {/* Custom dropdown arrow */}
+                      <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                        <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
               </motion.div>
               <motion.div
                 className="flex flex-col sm:flex-row items-center space-y-4 sm:space-y-0 sm:space-x-6 xl:mt-0"
@@ -1390,7 +1512,9 @@ const SimpleDashboard: React.FC = () => {
               >
                 <div className="text-center">
                   <div className="text-2xl font-bold">{stats.totalAssignments}</div>
-                  <div className="text-sm text-blue-200">Assignments</div>
+                  <div className="text-sm text-blue-200">
+                    {selectedSubject ? `${selectedSubject.code} Assignments` : 'Assignments'}
+                  </div>
                 </div>
                 <div className="text-center">
                   {isLoadingStats ? (
@@ -1401,12 +1525,16 @@ const SimpleDashboard: React.FC = () => {
                   ) : stats.averageScore !== null ? (
                     <>
                   <div className="text-2xl font-bold">{stats.averageScore?.toFixed(2)}%</div>
-                      <div className="text-sm text-blue-200">Class Average</div>
+                      <div className="text-sm text-blue-200">
+                        {selectedSubject ? `${selectedSubject.code} Average` : 'Class Average'}
+                      </div>
                     </>
                   ) : (
                     <>
                       <div className="text-lg font-medium text-blue-200">No grades yet</div>
-                      <div className="text-sm text-blue-200">Class Average</div>
+                      <div className="text-sm text-blue-200">
+                        {selectedSubject ? `${selectedSubject.code} Average` : 'Class Average'}
+                      </div>
                     </>
                   )}
               </div>
@@ -1953,9 +2081,11 @@ const SimpleDashboard: React.FC = () => {
                   >
                     <FileText className="w-6 h-6 text-white" />
                   </motion.div>
-                  Your Assignments
+                  {selectedSubject ? `${selectedSubject.code} Assignments` : 'Your Assignments'}
                 </motion.h3>
-                <p className="text-slate-600 dark:text-slate-400 mt-2 font-medium">Click on any assignment to view details</p>
+                <p className="text-slate-600 dark:text-slate-400 mt-2 font-medium">
+                  {selectedSubject ? `Click on any ${selectedSubject.code} assignment to view details` : 'Click on any assignment to view details'}
+                </p>
               </div>
               
               <div className="p-6">
