@@ -141,7 +141,18 @@ const SimpleDashboard: React.FC = () => {
   const [chatInput, setChatInput] = useState('');
   const [currentStep, setCurrentStep] = useState(0);
   
-  // Assignment creation workflow state
+  // New 6-step workflow state
+  const [workflowStep, setWorkflowStep] = useState<'name' | 'question' | 'solution' | 'rubrics' | 'upload' | 'complete'>('name');
+  const [workflowData, setWorkflowData] = useState({
+    assignmentName: '',
+    questionFile: null as File | null,
+    solution: '',
+    rubrics: '',
+    maxPoints: 100,
+    assignmentId: null as number | null
+  });
+  
+  // Assignment creation workflow state (legacy)
   const [assignmentData, setAssignmentData] = useState({
     title: '',
     description: '',
@@ -155,9 +166,12 @@ const SimpleDashboard: React.FC = () => {
   const [isGeneratingSolution, setIsGeneratingSolution] = useState(false);
   const [isGrading, setIsGrading] = useState(false);
   const [gradingProgress, setGradingProgress] = useState(0);
+  
+  // Solution modal state
+  const [showSolutionModal, setShowSolutionModal] = useState(false);
+  const [currentSolution, setCurrentSolution] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [showSolutionModal, setShowSolutionModal] = useState(false);
   const [solutionChangeCount, setSolutionChangeCount] = useState(0);
   const [isStateSaved, setIsStateSaved] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null); // Ref for auto-scrolling
@@ -309,6 +323,28 @@ const SimpleDashboard: React.FC = () => {
   }), [assignments.length, classAverage]);
 
   // Fetch class average from API
+  // Helper function to fetch and sort assignments by creation date (newest first)
+  const fetchAssignmentsSorted = useCallback(async () => {
+    try {
+      const response = await fetch('http://localhost:5002/api/assignments');
+      if (response.ok) {
+        const assignmentsData = await response.json();
+        // Sort by created_at in descending order (newest first)
+        const sortedAssignments = assignmentsData.sort((a: Assignment, b: Assignment) => 
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+        setAssignments(sortedAssignments);
+        return sortedAssignments;
+      } else {
+        console.error('Error fetching assignments:', response.status);
+        return [];
+      }
+    } catch (error) {
+      console.error('Error fetching assignments:', error);
+      return [];
+    }
+  }, []);
+
   const fetchClassAverage = useCallback(async () => {
     setIsLoadingStats(true);
     try {
@@ -468,14 +504,7 @@ const SimpleDashboard: React.FC = () => {
 
       // Fetch assignments for the selected professor
       console.log('Fetching assignments...');
-      const assignmentsResponse = await fetch('http://localhost:5002/api/assignments');
-      if (assignmentsResponse.ok) {
-      const assignmentsData = await assignmentsResponse.json();
-      setAssignments(assignmentsData);
-        console.log('Assignments loaded:', assignmentsData.length);
-      } else {
-        console.error('Error fetching assignments:', assignmentsResponse.status);
-      }
+      await fetchAssignmentsSorted();
 
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -491,7 +520,127 @@ const SimpleDashboard: React.FC = () => {
     setChatMessages(prev => [...prev, botMessage]);
   };
 
-  // Assignment creation workflow functions (3 steps)
+  // New 6-step workflow functions
+  const startNewWorkflow = () => {
+    setWorkflowStep('name');
+    setWorkflowData({
+      assignmentName: '',
+      questionFile: null,
+      solution: '',
+      rubrics: '',
+      maxPoints: 100,
+      assignmentId: null
+    });
+    addBotMessage("🎯 **Welcome to the Assignment Creation Workflow!**\n\n**Step 1/6: Assignment Name**\nWhat would you like to call this assignment?");
+  };
+
+  const handleWorkflowStep = (userInput: string) => {
+    switch (workflowStep) {
+      case 'name':
+        handleAssignmentName(userInput);
+        break;
+      case 'question':
+        handleQuestionUpload(userInput);
+        break;
+      case 'solution':
+        handleSolutionAcceptance(userInput);
+        break;
+      case 'rubrics':
+        handleRubricsInput(userInput);
+        break;
+      case 'upload':
+        handleSolutionUpload(userInput);
+        break;
+      case 'complete':
+        handleWorkflowComplete(userInput);
+        break;
+      default:
+        addBotMessage("🤔 **I'm not sure what to do with that input. Please try again or type 'help' for assistance.**");
+    }
+  };
+
+  const handleAssignmentName = (name: string) => {
+    setWorkflowData(prev => ({ ...prev, assignmentName: name }));
+    setWorkflowStep('question');
+    addBotMessage(`✅ **Assignment Name Set:** "${name}"\n\n**Step 2/6: Question File Upload**\nPlease upload the assignment question file (DOCX, PDF, or TXT).\n\nClick the "Choose File" button below to upload your question file.`);
+  };
+
+  const handleQuestionUpload = (input: string) => {
+    if (input.toLowerCase().includes('upload') || input.toLowerCase().includes('file')) {
+      addBotMessage("📁 **Please use the file upload button below to upload your question file.**\n\nSupported formats: DOCX, PDF, TXT");
+    } else {
+      addBotMessage("📁 **Please upload the question file using the upload button below.**");
+    }
+  };
+
+  const regenerateSolution = async () => {
+    setIsGeneratingSolution(true);
+    try {
+      if (!workflowData.assignmentId) {
+        addBotMessage(`❌ **Error: Assignment not found.** Please start over.`);
+        return;
+      }
+      
+      // Generate new solution using the assignment ID
+      const solutionResponse = await fetch(`http://localhost:5002/api/generate-solution/${workflowData.assignmentId}`, {
+        method: 'POST'
+      });
+
+      if (!solutionResponse.ok) {
+        const errorData = await solutionResponse.json().catch(() => ({}));
+        throw new Error(errorData.error || `Solution generation failed with status ${solutionResponse.status}`);
+      }
+
+      const solutionResult = await solutionResponse.json();
+      console.log('🔍 DEBUG: New solution generated successfully:', solutionResult);
+      
+      setWorkflowData(prev => ({ ...prev, solution: solutionResult.solution }));
+      setCurrentSolution(solutionResult.solution);
+      setShowSolutionModal(true);
+      addBotMessage(`✅ **New Solution Generated!**\n\n**Step 3/6: Review Solution**\n\nPlease review the new solution in the popup window and choose your action.`);
+      
+    } catch (error) {
+      console.error('Error regenerating solution:', error);
+      addBotMessage(`❌ **Error regenerating solution:** ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsGeneratingSolution(false);
+    }
+  };
+
+  const handleSolutionAcceptance = (input: string) => {
+    // This function is now handled by the modal buttons
+    // Keep it for backward compatibility but redirect to modal
+    addBotMessage("🤔 **Please use the popup window to review the solution and choose your action.**");
+  };
+
+  const handleRubricsInput = (rubrics: string) => {
+    setWorkflowData(prev => ({ ...prev, rubrics }));
+    setWorkflowStep('upload');
+    addBotMessage(`✅ **Rubrics Set:** "${rubrics}"\n\n**Step 5/6: Student Submissions Upload**\nNow please upload the ZIP file containing student submissions.\n\nClick the "Choose File" button below to upload the submissions ZIP file.`);
+  };
+
+  const handleSolutionUpload = (input: string) => {
+    if (input.toLowerCase().includes('upload') || input.toLowerCase().includes('file')) {
+      addBotMessage("📁 **Please use the file upload button below to upload the student submissions ZIP file.**");
+    } else {
+      addBotMessage("📁 **Please upload the student submissions ZIP file using the upload button below.**");
+    }
+  };
+
+  const handleWorkflowComplete = async (input: string) => {
+    addBotMessage("🎉 **Assignment Creation Complete!**\n\nYour assignment has been successfully created and graded.\n\n**Summary:**\n• Assignment: " + workflowData.assignmentName + "\n• Students Graded: " + (workflowData.assignmentId ? "Completed" : "Pending") + "\n• Status: Ready for review\n\n**Next Steps:**\n• View grades in the assignment card\n• Download CSV reports\n• Review individual submissions\n\nType 'create' to start a new assignment workflow!");
+    
+    // Refresh assignments list to show the new assignment
+    try {
+      await fetchAssignmentsSorted();
+      fetchClassAverage();
+      fetchAssignmentAverages();
+    } catch (error) {
+      console.error('Error refreshing assignments:', error);
+    }
+  };
+
+  // Legacy assignment creation workflow functions (3 steps)
   const startAssignmentCreation = () => {
     addBotMessage("🎯 **Let's create a new assignment!**\n\n**Step 1/3: Assignment Title**\nWhat would you like to call this assignment?");
     setCurrentStep(1);
@@ -524,47 +673,123 @@ const SimpleDashboard: React.FC = () => {
       return;
     }
     
+    // Handle based on current workflow step
+    if (workflowStep === 'question') {
+      setWorkflowData(prev => ({ ...prev, questionFile: file }));
+      addBotMessage(`📁 **Question File Uploaded Successfully!**\n\nFile: ${file.name} (${(file.size / 1024).toFixed(1)}KB)\n\n**Step 3/6: Generate Solution**\n\nNow I'll create the assignment and generate a reference solution using AI. This may take a moment...`);
+      setWorkflowStep('solution');
+      createAssignmentAndGenerateSolution(file);
+    } else if (workflowStep === 'upload') {
+      // Handle student submissions upload
+      handleStudentSubmissionsUpload(file);
+    } else {
+      // Legacy workflow
     setAssignmentData(prev => ({ ...prev, file }));
-    addBotMessage(`📁 **File Uploaded Successfully!**\n\nFile: ${file.name} (${(file.size / 1024).toFixed(1)}KB)\n\n🤖 **Step 3/3: Generate Solution**\n\nNow I'll generate a reference solution using AI. This may take a moment...`);
+      addBotMessage(`📁 **File Uploaded Successfully!**\n\nFile: ${file.name} (${(file.size / 1024).toFixed(1)}KB)\n\n🤖 **Step 3/3: Generate Solution**\n\nNow I'll generate a reference solution using AI. This may take a moment...`);
     setCurrentStep(3);
-    generateSolution(file);
+      generateSolution(file);
+    }
   };
 
-  const generateSolution = async (file?: File) => {
+  const handleStudentSubmissionsUpload = async (file: File) => {
+    setIsUploading(true);
+    setUploadProgress(0);
+    
+    try {
+      addBotMessage(`📁 **Student Submissions Uploaded Successfully!**\n\nFile: ${file.name} (${(file.size / 1024).toFixed(1)}KB)\n\n**Step 6/6: Complete Process**\n\nStarting the grading process...`);
+      
+      // Create assignment first
+      const assignmentResponse = await fetch('http://localhost:5002/api/upload-question-file', {
+        method: 'POST',
+        body: (() => {
+          const formData = new FormData();
+          formData.append('title', workflowData.assignmentName);
+          formData.append('description', workflowData.assignmentName);
+          formData.append('max_points', workflowData.maxPoints.toString());
+          formData.append('professor_id', professor?.id.toString() || '1');
+          if (workflowData.questionFile) {
+            formData.append('file', workflowData.questionFile);
+          }
+          return formData;
+        })()
+      });
+
+      if (!assignmentResponse.ok) {
+        throw new Error(`Assignment creation failed: ${assignmentResponse.status}`);
+      }
+
+      const assignmentResult = await assignmentResponse.json();
+      const assignmentId = assignmentResult.assignment_id;
+      
+      setWorkflowData(prev => ({ ...prev, assignmentId }));
+      
+      // Generate solution
+      const solutionResponse = await fetch(`http://localhost:5002/api/generate-solution/${assignmentId}`, {
+        method: 'POST'
+      });
+
+      if (!solutionResponse.ok) {
+        throw new Error(`Solution generation failed: ${solutionResponse.status}`);
+      }
+
+      const solutionResult = await solutionResponse.json();
+      setWorkflowData(prev => ({ ...prev, solution: solutionResult.solution }));
+      
+      // Upload student submissions and start grading
+      const uploadResponse = await fetch(`http://localhost:5002/api/assignments/${assignmentId}/upload`, {
+        method: 'POST',
+        body: (() => {
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('rubric', workflowData.rubrics);
+          formData.append('max_points', workflowData.maxPoints.toString());
+          return formData;
+        })()
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error(`Upload failed: ${uploadResponse.status}`);
+      }
+
+      setWorkflowStep('complete');
+      addBotMessage(`🎉 **Assignment Creation Complete!**\n\nYour assignment has been successfully created and graded.\n\n**Summary:**\n• Assignment: ${workflowData.assignmentName}\n• Students Graded: Completed\n• Status: Ready for review\n\n**Next Steps:**\n• View grades in the assignment card\n• Download CSV reports\n• Review individual submissions\n\nType 'create' to start a new assignment workflow!`);
+      
+      // Refresh assignments list
+      await fetchAssignmentsSorted();
+      fetchClassAverage();
+      fetchAssignmentAverages();
+      
+    } catch (error) {
+      console.error('Error in student submissions upload:', error);
+      addBotMessage(`❌ **Error during upload:** ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(0);
+    }
+  };
+
+  const createAssignmentAndGenerateSolution = async (file: File) => {
     setIsGeneratingSolution(true);
     try {
-      // Debug: Check if we have the required data
-      console.log('Assignment data:', assignmentData);
-      console.log('File parameter:', file);
-      console.log('File parameter type:', typeof file);
-      console.log('File parameter name:', file?.name);
-      console.log('File parameter size:', file?.size);
+      console.log('🔍 DEBUG: Creating assignment and generating solution for new workflow');
+      console.log('Workflow data:', workflowData);
+      console.log('File:', file);
       
-      if (!assignmentData.title || !assignmentData.description) {
-        addBotMessage(`❌ **Error: Missing assignment information.** Please start over and provide a title.`);
-        setIsGeneratingSolution(false);
-        return;
-      }
-
-      // Step 1: Upload file and create assignment
+      // Step 1: Create assignment with uploaded file
       const formData = new FormData();
-      formData.append('title', assignmentData.title);
-      formData.append('description', assignmentData.description);
-      
-      // Use the file parameter if provided, otherwise use the file from state
-      const fileToUpload = file || assignmentData.file;
-      console.log('File to upload:', fileToUpload);
-      console.log('File from parameter:', file);
-      console.log('File from state:', assignmentData.file);
-      
-      if (!fileToUpload) {
-        addBotMessage(`❌ **Error: No file provided.** Please upload a file first.`);
-        setIsGeneratingSolution(false);
-        return;
-      }
+      formData.append('title', workflowData.assignmentName);
+      formData.append('description', workflowData.assignmentName);
+      formData.append('file', file);
+      formData.append('max_points', workflowData.maxPoints.toString());
+      formData.append('professor_id', professor?.id.toString() || '1');
 
-      formData.append('file', fileToUpload);
-      console.log('File attached to FormData:', fileToUpload.name, fileToUpload.size);
+      console.log('🔍 DEBUG: Uploading assignment with data:', {
+        title: workflowData.assignmentName,
+        description: workflowData.assignmentName,
+        file: file.name,
+        max_points: workflowData.maxPoints,
+        professor_id: professor?.id
+      });
 
       // Upload file and create assignment
       const uploadResponse = await fetch('http://localhost:5002/api/upload-question-file', {
@@ -578,14 +803,126 @@ const SimpleDashboard: React.FC = () => {
       }
 
       const uploadResult = await uploadResponse.json();
-      console.log('Upload result:', uploadResult);
+      console.log('🔍 DEBUG: Assignment created successfully:', uploadResult);
+      
+      // Store assignment ID in workflow data
+      setWorkflowData(prev => ({ ...prev, assignmentId: uploadResult.assignment_id }));
       
       // Step 2: Generate solution using the assignment ID
       const solutionResponse = await fetch(`http://localhost:5002/api/generate-solution/${uploadResult.assignment_id}`, {
         method: 'POST'
       });
 
-      if (solutionResponse.ok) {
+      if (!solutionResponse.ok) {
+        const errorData = await solutionResponse.json().catch(() => ({}));
+        throw new Error(errorData.error || `Solution generation failed with status ${solutionResponse.status}`);
+      }
+
+      const solutionResult = await solutionResponse.json();
+      console.log('🔍 DEBUG: Solution generated successfully:', solutionResult);
+      
+      setWorkflowData(prev => ({ ...prev, solution: solutionResult.solution }));
+      setCurrentSolution(solutionResult.solution);
+      setShowSolutionModal(true);
+      addBotMessage(`✅ **Solution Generated Successfully!**\n\n**Step 3/6: Review Solution**\n\nPlease review the solution in the popup window and choose your action.`);
+      
+    } catch (error) {
+      console.error('Error in createAssignmentAndGenerateSolution:', error);
+      addBotMessage(`❌ **Error creating assignment and generating solution:** ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsGeneratingSolution(false);
+    }
+  };
+
+  const generateSolution = async (file?: File) => {
+    setIsGeneratingSolution(true);
+    try {
+      // Debug: Check if we have the required data
+      console.log('Assignment data:', assignmentData);
+      console.log('Workflow data:', workflowData);
+      console.log('File parameter:', file);
+      console.log('File parameter type:', typeof file);
+      console.log('File parameter name:', file?.name);
+      console.log('File parameter size:', file?.size);
+      
+      // Check if we're in the new workflow or legacy workflow
+      const isNewWorkflow = workflowStep === 'solution';
+      
+      if (isNewWorkflow) {
+        // New workflow: We already have the assignment created, just generate solution
+        if (!workflowData.assignmentId) {
+          addBotMessage(`❌ **Error: Assignment not found.** Please start over.`);
+          setIsGeneratingSolution(false);
+          return;
+        }
+        
+        const solutionResponse = await fetch(`http://localhost:5002/api/generate-solution/${workflowData.assignmentId}`, {
+          method: 'POST'
+        });
+        
+        if (!solutionResponse.ok) {
+          const errorData = await solutionResponse.json().catch(() => ({}));
+          throw new Error(errorData.error || `Solution generation failed with status ${solutionResponse.status}`);
+        }
+
+        const solutionResult = await solutionResponse.json();
+        console.log('Solution result:', solutionResult);
+        
+        setWorkflowData(prev => ({ ...prev, solution: solutionResult.solution }));
+        setCurrentSolution(solutionResult.solution);
+        setShowSolutionModal(true);
+        addBotMessage(`✅ **Solution Generated Successfully!**\n\n**Step 3/6: Review Solution**\n\nPlease review the solution in the popup window and choose your action.`);
+        
+        setIsGeneratingSolution(false);
+        return;
+      } else {
+        // Legacy workflow
+      if (!assignmentData.title || !assignmentData.description) {
+        addBotMessage(`❌ **Error: Missing assignment information.** Please start over and provide a title.`);
+        setIsGeneratingSolution(false);
+        return;
+      }
+
+        // Step 1: Upload file and create assignment
+      const formData = new FormData();
+      formData.append('title', assignmentData.title);
+      formData.append('description', assignmentData.description);
+        
+        // Use the file parameter if provided, otherwise use the file from state
+        const fileToUpload = file || assignmentData.file;
+        console.log('File to upload:', fileToUpload);
+        console.log('File from parameter:', file);
+        console.log('File from state:', assignmentData.file);
+        
+        if (!fileToUpload) {
+          addBotMessage(`❌ **Error: No file provided.** Please upload a file first.`);
+          setIsGeneratingSolution(false);
+          return;
+        }
+
+        formData.append('file', fileToUpload);
+        console.log('File attached to FormData:', fileToUpload.name, fileToUpload.size);
+
+        // Upload file and create assignment
+        const uploadResponse = await fetch('http://localhost:5002/api/upload-question-file', {
+        method: 'POST',
+        body: formData
+      });
+
+        if (!uploadResponse.ok) {
+          const errorData = await uploadResponse.json().catch(() => ({}));
+          throw new Error(errorData.error || `Upload failed with status ${uploadResponse.status}`);
+        }
+
+        const uploadResult = await uploadResponse.json();
+        console.log('Upload result:', uploadResult);
+        
+        // Step 2: Generate solution using the assignment ID
+        const solutionResponse = await fetch(`http://localhost:5002/api/generate-solution/${uploadResult.assignment_id}`, {
+          method: 'POST'
+        });
+
+        if (solutionResponse.ok) {
         const result = await solutionResponse.json();
         setAssignmentData(prev => ({ ...prev, solution: result.solution, file: fileToUpload || prev.file, assignmentId: result.assignment_id }));
         
@@ -595,10 +932,11 @@ const SimpleDashboard: React.FC = () => {
         const contentInfo = result.content_length ? `\n📊 **Content extracted:** ${result.content_length} characters` : '';
         const solutionInfo = result.solution_length ? `\n🤖 **Solution generated:** ${result.solution_length} characters` : '';
         
-        addBotMessage(`✅ **Solution Generated Successfully!**\n\nI've created a reference solution based on your assignment.${fileInfo}${contentInfo}${solutionInfo}\n\nPlease review it and let me know if you'd like any changes.`);
+        setCurrentSolution(assignmentData.solution);
+        setShowSolutionModal(true);
+        addBotMessage(`✅ **Solution Generated Successfully!**\n\nI've created a reference solution based on your assignment.${fileInfo}${contentInfo}${solutionInfo}\n\nPlease review it in the popup window and choose your action.`);
         console.log('🔍 DEBUG: Setting showSolutionModal to true');
         console.log('🔍 DEBUG: Solution content:', result.solution);
-        setShowSolutionModal(true);
       } else {
         const errorData = await solutionResponse.json().catch(() => ({}));
         console.error('Solution generation error:', solutionResponse.status, errorData);
@@ -613,6 +951,7 @@ const SimpleDashboard: React.FC = () => {
         errorMessage += `\n\nPlease try again or contact support if the issue persists.`;
         
         addBotMessage(errorMessage);
+        }
       }
     } catch (error) {
       console.error('Solution generation error:', error);
@@ -622,82 +961,38 @@ const SimpleDashboard: React.FC = () => {
   };
 
   const approveSolution = () => {
+    if (workflowStep === 'solution') {
+      // New workflow: Move to rubrics step
+      setWorkflowStep('rubrics');
+      addBotMessage(`✅ **Solution Approved!**\n\n**Step 4/6: Grading Rubrics**\nPlease provide the grading rubrics for this assignment.\n\nExample: 'Code quality (30%), Correctness (40%), Efficiency (20%), Documentation (10%)'`);
+    } else {
+      // Legacy workflow
     addBotMessage(`✅ **Solution Approved!**\n\nNow upload the ZIP file containing student submissions to start grading:`);
-    setShowSolutionModal(false);
     setCurrentStep(4);
     
     // Add upload interface as a bot message
     setTimeout(() => {
       addBotMessage(`**Please use the file upload button below to upload student submissions:**`);
     }, 500);
+    }
+    setShowSolutionModal(false);
   };
 
   const requestSolutionChange = () => {
+    if (workflowStep === 'solution') {
+      // New workflow: Regenerate solution
+      addBotMessage(`🔄 **Regenerating solution...**\n\nPlease wait while I generate a new solution for your assignment.`);
+      setShowSolutionModal(false);
+      regenerateSolution();
+    } else {
+      // Legacy workflow
     const newChangeCount = solutionChangeCount + 1;
     setSolutionChangeCount(newChangeCount);
     addBotMessage(`🔄 **Requesting Solution Changes** (Attempt ${newChangeCount})\n\nWhat would you like me to change in the solution?`);
     setShowSolutionModal(false);
-  };
-
-  const handleStudentSubmissionsUpload = async (file: File) => {
-    addBotMessage(`📁 **Student Submissions Uploaded!**\n\nFile: ${file.name} (${(file.size / 1024).toFixed(1)}KB)\n\nNow uploading student submissions and starting grading process...`);
-    
-    setIsUploading(true);
-    setUploadProgress(0);
-    
-    try {
-      // Check if we have a valid assignment ID
-      if (!assignmentData.assignmentId) {
-        throw new Error('No assignment ID found. Please start the workflow from the beginning.');
-      }
-      
-      console.log('🔍 DEBUG: Uploading ZIP to assignment ID:', assignmentData.assignmentId);
-      
-      // Upload the student submissions ZIP file to the assignment
-      const uploadFormData = new FormData();
-      uploadFormData.append('file', file);
-      
-      addBotMessage(`⏳ **Uploading and processing... This may take 2-4 minutes...**\n\nPlease wait while the system:\n• Uploads your ZIP file\n• Extracts all Python files\n• Generates a reference solution\n• Grades each student submission`);
-      
-      // Simulate progress during upload
-      const progressInterval = setInterval(() => {
-        setUploadProgress(prev => Math.min(prev + 5, 90));
-      }, 500);
-      
-      const uploadResponse = await fetch(`http://localhost:5002/api/assignments/${assignmentData.assignmentId}/upload`, {
-        method: 'POST',
-        body: uploadFormData
-      });
-      
-      clearInterval(progressInterval);
-      setUploadProgress(100);
-      
-      if (!uploadResponse.ok) {
-        const errorText = await uploadResponse.text();
-        console.error('❌ Upload failed:', uploadResponse.status, errorText);
-        throw new Error(`Upload failed: ${uploadResponse.status} - ${errorText}`);
-      }
-      
-      const uploadResult = await uploadResponse.json();
-      console.log('✅ Upload successful:', uploadResult);
-      
-      addBotMessage(`✅ **Grading completed successfully!**\n\nThe system has:\n• Extracted ${uploadResult.total_submissions || 'multiple'} Python files\n• Generated a reference solution\n• Graded each student submission\n• Saved results to the database\n\n🎉 **You can now view the complete grading report!**`);
-      
-      // Refresh class average and assignment averages after grading
-      fetchClassAverage();
-      fetchAssignmentAverages();
-      
-      // Reset workflow
-      setCurrentStep(0);
-      
-    } catch (error) {
-      console.error('Upload error:', error);
-      addBotMessage(`❌ **Error uploading student submissions:** ${error instanceof Error ? error.message : 'Unknown error'}\n\nPlease try again.`);
-    } finally {
-      setIsUploading(false);
-      setUploadProgress(0);
     }
   };
+
 
   const startGradingWithAssignment = async (assignmentId: number, rubrics: string, maxPoints: number) => {
     setIsGrading(true);
@@ -735,16 +1030,17 @@ const SimpleDashboard: React.FC = () => {
               // Grading complete!
               setGradingProgress(100);
               addBotMessage(`🎉 **Grading Complete!**\n\n✅ ${status.total_submissions} submissions graded\n📊 Average score: ${status.average_score}%\n\nCheck the analytics dashboard for detailed insights!`);
-              
-              // Show notification
-              if ('Notification' in window && Notification.permission === 'granted') {
-                new Notification('Grading Complete!', {
+        
+        // Show notification
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('Grading Complete!', {
                   body: `Graded ${status.total_submissions} submissions with average score of ${status.average_score}%`,
-                  icon: '/logo192.png'
-                });
-              }
+            icon: '/logo192.png'
+          });
+        }
               
-              // Refresh class average and assignment averages after grading completion
+              // Refresh assignments list, class average and assignment averages after grading completion
+              await fetchAssignmentsSorted();
               fetchClassAverage();
               fetchAssignmentAverages();
               
@@ -758,13 +1054,13 @@ const SimpleDashboard: React.FC = () => {
               
               // Continue polling
               setTimeout(pollStatus, 2000); // Poll every 2 seconds
-            } else {
+      } else {
               throw new Error('Unexpected grading status: ' + status.status);
             }
           } else {
             throw new Error('Failed to check grading status');
-          }
-        } catch (error) {
+      }
+    } catch (error) {
           console.error('Status polling error:', error);
           addBotMessage(`❌ **Status check failed:** ${error instanceof Error ? error.message : 'Unknown error'}\n\nGrading may still be in progress. Please refresh the page to check.`);
           setIsGrading(false);
@@ -778,8 +1074,8 @@ const SimpleDashboard: React.FC = () => {
     } catch (error) {
       console.error('Grading error:', error);
       addBotMessage(`❌ **Grading failed:** ${error instanceof Error ? error.message : 'Unknown error'}\n\nPlease try again.`);
-      setIsGrading(false);
-      setCurrentStep(0);
+    setIsGrading(false);
+    setCurrentStep(0);
     }
   };
 
@@ -802,14 +1098,27 @@ const SimpleDashboard: React.FC = () => {
     const userInput = chatInput.toLowerCase();
     setChatInput('');
 
-    // Enhanced chatbot responses with simplified 3-step workflow
+    // Enhanced chatbot responses with new 6-step workflow
     if (userInput.includes('create') || userInput.includes('new') || userInput.includes('assignment')) {
-      startAssignmentCreation();
+      startNewWorkflow();
+    } else if (workflowStep !== 'name' && workflowStep !== 'complete') {
+      // Handle workflow steps (except name and complete)
+      handleWorkflowStep(chatInput);
+    } else if (workflowStep === 'name') {
+      // Handle assignment name input
+      handleAssignmentName(chatInput);
+    } else if (workflowStep === 'complete') {
+      // Handle workflow complete - allow starting new workflow
+      if (userInput.includes('create') || userInput.includes('new') || userInput.includes('assignment')) {
+        startNewWorkflow();
+      } else {
+        handleWorkflowComplete(chatInput);
+      }
     } else if (currentStep === 1) {
-      // Step 1: Assignment Title
+      // Legacy: Step 1: Assignment Title
       handleAssignmentTitle(chatInput);
     } else if (currentStep === 4) {
-      // Step 4: Upload student submissions and start grading
+      // Legacy: Step 4: Upload student submissions and start grading
       if (userInput.includes('upload') || userInput.includes('submission')) {
         addBotMessage(`📁 **Please use the file upload button below to upload student submissions ZIP file.**`);
       } else {
@@ -954,10 +1263,10 @@ const SimpleDashboard: React.FC = () => {
                     <div className="flex items-center justify-center space-x-2">
                       <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-200 border-t-transparent"></div>
                       <div className="text-sm text-blue-200">Loading...</div>
-                    </div>
+              </div>
                   ) : stats.averageScore !== null ? (
                     <>
-                      <div className="text-2xl font-bold">{stats.averageScore}%</div>
+                  <div className="text-2xl font-bold">{stats.averageScore}%</div>
                       <div className="text-sm text-blue-200">Class Average</div>
                     </>
                   ) : (
@@ -999,6 +1308,15 @@ const SimpleDashboard: React.FC = () => {
               <div>
                     <h3 className="text-xl font-bold text-gray-900 dark:text-white">AI Assistant</h3>
                     <p className="text-sm text-gray-500 dark:text-gray-400">Your grading companion</p>
+                    {workflowStep !== 'name' && (
+                      <div className="mt-2 text-xs text-blue-600 dark:text-blue-400 font-medium">
+                        Workflow: {workflowStep === 'question' ? 'Step 2/6: Question Upload' :
+                                  workflowStep === 'solution' ? 'Step 3/6: Solution Generation' :
+                                  workflowStep === 'rubrics' ? 'Step 4/6: Rubrics Input' :
+                                  workflowStep === 'upload' ? 'Step 5/6: Submissions Upload' :
+                                  workflowStep === 'complete' ? 'Step 6/6: Complete' : 'Active'}
+                      </div>
+                    )}
               </div>
                 </motion.div>
               </div>
@@ -1022,13 +1340,37 @@ const SimpleDashboard: React.FC = () => {
                         whileHover={{ scale: 1.02 }}
                         transition={{ type: "spring", stiffness: 300 }}
                       >
+                        {message.text.includes('```') ? (
+                          <div className="text-sm">
+                            {message.text.split('```').map((part, index) => {
+                              if (index % 2 === 1) {
+                                // This is a code block
+                                return (
+                                  <div key={index} className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 my-2">
+                                    <pre className="text-xs text-gray-800 dark:text-gray-200 whitespace-pre-wrap font-mono">
+                                      {part}
+                                    </pre>
+                                  </div>
+                                );
+                              } else {
+                                // This is regular text
+                                return (
+                                  <span key={index} className="whitespace-pre-wrap">
+                                    {part}
+                                  </span>
+                                );
+                              }
+                            })}
+                          </div>
+                        ) : (
                         <p className="text-sm whitespace-pre-wrap">{message.text}</p>
+                        )}
                         
                         {/* Upload buttons inside bot messages */}
                         {!message.isUser && (
                           <>
                             {/* Assignment Question Paper Upload - Step 2 */}
-                            {currentStep === 2 && message.text.includes('upload your assignment question paper') && (
+                            {(currentStep === 2 || workflowStep === 'question') && (message.text.includes('upload your assignment question paper') || message.text.includes('Question File Upload')) && (
                               <motion.div 
                                 className="mt-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800"
                                 initial={{ opacity: 0, y: 10 }}
@@ -1037,11 +1379,13 @@ const SimpleDashboard: React.FC = () => {
                               >
                                 <div className="text-xs font-medium text-blue-800 dark:text-blue-200 mb-2 flex items-center">
                                   <span className="mr-1">📄</span>
-                                  Upload Assignment Question Paper
+                                  {workflowStep === 'question' ? 'Upload Assignment Question Paper' : 
+                                   workflowStep === 'upload' ? 'Upload Student Submissions (ZIP)' :
+                                   'Upload Assignment Question Paper'}
                                 </div>
                                 <input
                                   type="file"
-                                  accept=".docx,.pdf,.txt"
+                                  accept={workflowStep === 'upload' ? '.zip' : '.docx,.pdf,.txt'}
                                   onChange={(e) => {
                                     const file = e.target.files?.[0];
                                     if (file) {
@@ -1051,13 +1395,15 @@ const SimpleDashboard: React.FC = () => {
                                   className="w-full p-2 border border-blue-300 dark:border-blue-600 rounded-lg bg-white dark:bg-gray-800 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
                                 />
                                 <div className="text-xs text-blue-600 dark:text-blue-300 mt-1">
-                                  Upload DOCX, PDF, or TXT file containing assignment questions (max 10MB)
+                                  {workflowStep === 'upload' ? 
+                                    'Upload ZIP file containing student submissions (max 10MB)' :
+                                    'Upload DOCX, PDF, or TXT file containing assignment questions (max 10MB)'}
                                 </div>
                               </motion.div>
                             )}
 
                             {/* Student Submissions Upload - Step 4 */}
-                            {currentStep === 4 && message.text.includes('upload student submissions') && (
+                            {(currentStep === 4 || workflowStep === 'upload') && (message.text.includes('upload student submissions') || message.text.includes('Student Submissions Upload')) && (
                               <motion.div 
                                 className="mt-3 p-2 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800"
                                 initial={{ opacity: 0, y: 10 }}
@@ -1120,7 +1466,7 @@ const SimpleDashboard: React.FC = () => {
                               animate={{ scale: [1, 1.2, 1] }}
                               transition={{ duration: 0.6, repeat: Infinity, delay: 0.4 }}
                             />
-                          </div>
+          </div>
                           <span className="text-sm font-medium">🤖 AI is generating solution...</span>
                         </div>
                         <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
@@ -1375,7 +1721,7 @@ const SimpleDashboard: React.FC = () => {
                       <div className="animate-spin rounded-full h-4 w-4 border-2 border-purple-500 border-t-transparent"></div>
                       <div className="text-sm font-medium text-purple-800 dark:text-purple-200">
                         🤖 AI Grading in Progress...
-                      </div>
+              </div>
                     </div>
                     
                     <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3 mb-2">
@@ -1383,7 +1729,7 @@ const SimpleDashboard: React.FC = () => {
                         className="bg-gradient-to-r from-purple-500 to-blue-500 h-3 rounded-full transition-all duration-500 ease-out"
                         style={{ width: `${gradingProgress}%` }}
                       ></div>
-                    </div>
+            </div>
                     
                     <div className="flex justify-between items-center text-xs text-purple-600 dark:text-purple-300">
                       <span>{gradingProgress}% Complete</span>
@@ -1394,7 +1740,7 @@ const SimpleDashboard: React.FC = () => {
                     
                     <div className="mt-2 text-xs text-gray-600 dark:text-gray-400">
                       💡 This process typically takes 2-4 minutes for multiple submissions
-                    </div>
+          </div>
                   </motion.div>
                 )}
 
@@ -1510,7 +1856,7 @@ const SimpleDashboard: React.FC = () => {
             <div className="p-6 max-h-96 overflow-y-auto">
               <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4">
                 <pre className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">
-                  {assignmentData.solution}
+                  {currentSolution}
                 </pre>
               </div>
             </div>
@@ -1520,13 +1866,13 @@ const SimpleDashboard: React.FC = () => {
                 onClick={approveSolution}
                 className="flex-1 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg font-medium transition-colors"
               >
-                ✅ Approve Solution
+                ✅ Accept
               </button>
               <button
                 onClick={requestSolutionChange}
                 className="flex-1 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-medium transition-colors"
               >
-                🔄 Request Changes
+                🔄 Reject & Regenerate
               </button>
               <button
                 onClick={() => setShowSolutionModal(false)}
@@ -1676,7 +2022,7 @@ const SimpleDashboard: React.FC = () => {
                 <Download className="w-4 h-4" />
                 <span>Download CSV</span>
               </button>
-            </div>
+          </div>
           </motion.div>
         </motion.div>
       )}
