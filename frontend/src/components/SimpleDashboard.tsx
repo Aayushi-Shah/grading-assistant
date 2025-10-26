@@ -1401,7 +1401,7 @@ const SimpleDashboard: React.FC = () => {
       const subjectText = selectedSubject ? ` for ${selectedSubject.code} - ${selectedSubject.name}` : "";
       addBotMessage("📈 **Analytics & Performance" + subjectText + ":**\n\n**Key Metrics Available:**\n• **Assignment Statistics** - Total assignments and performance\n• **Grade Distribution** - Performance across students\n• **Trend Analysis** - Progress over time\n• **Class Performance** - Overall class averages\n\n**Dashboard Overview:**\n• Total Assignments: " + stats.totalAssignments + "\n• Class Average: " + averageText + "\n\nClick on any assignment card for detailed analytics!");
     } else if (userInput.includes('navigate') || userInput.includes('tour') || userInput.includes('around')) {
-      addBotMessage("🗺️ **Dashboard Navigation Guide:**\n\n**Left Side - AI Assistant:**\n• Chat with me for help and support\n• Quick action buttons for common tasks\n• Assignment creation workflow\n\n**Right Side - Your Assignments:**\n• View all your assignments\n• Click cards for detailed information\n• Access submissions and analytics\n\n**Top Section - Overview:**\n• Welcome message with your info\n• Key statistics and metrics\n• Quick access to main features\n\n**Need help with anything specific?** Just ask!");
+      addBotMessage("🗺️ **Dashboard Navigation Guide:**\n\n**Left Side - GradeMaster:**\n• Chat with me for help and support\n• Quick action buttons for common tasks\n• Assignment creation workflow\n\n**Right Side - Your Assignments:**\n• View all your assignments\n• Click cards for detailed information\n• Access submissions and analytics\n\n**Top Section - Overview:**\n• Welcome message with your info\n• Key statistics and metrics\n• Quick access to main features\n\n**Need help with anything specific?** Just ask!");
     } else if (userInput.includes('settings') || userInput.includes('preferences') || userInput.includes('theme')) {
       addBotMessage("⚙️ **Settings & Preferences:**\n\n**Available Options:**\n• **Theme Toggle** - Switch between light/dark mode\n• **Display Preferences** - Customize dashboard view\n• **Notification Settings** - Control alerts and updates\n• **Export Preferences** - Default CSV formats\n\n**Current Settings:**\n• Theme: " + (isDarkMode ? 'Dark Mode' : 'Light Mode') + "\n• Professor: " + (professor?.name || 'Not loaded') + "\n• Department: " + (professor?.department || 'Not specified') + "\n\nUse the theme toggle in the top-right corner to switch modes!");
     } else if (userInput.includes('grading') || userInput.includes('rubric') || userInput.includes('criteria')) {
@@ -1427,16 +1427,16 @@ const SimpleDashboard: React.FC = () => {
         transition={{ duration: 0.8, ease: "easeOut" }}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
+          <div className="flex justify-between items-center py-3">
             <motion.div 
               className="flex items-center"
               initial={{ opacity: 0, x: -30 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.3, duration: 0.6 }}
             >
-              <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-3">
                 <motion.div
-                  className="relative w-12 h-12 bg-gradient-to-br from-blue-600 via-purple-600 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg"
+                  className="relative w-10 h-10 bg-gradient-to-br from-blue-600 via-purple-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg"
                   whileHover={{ 
                     rotate: 360, 
                     scale: 1.1,
@@ -1444,34 +1444,34 @@ const SimpleDashboard: React.FC = () => {
                   }}
                   transition={{ duration: 0.6 }}
                 >
-                  <GraduationCap className="w-7 h-7 text-white" />
-                  <div className="absolute inset-0 bg-gradient-to-br from-blue-400 to-purple-400 rounded-2xl blur opacity-30"></div>
+                  <GraduationCap className="w-5 h-5 text-white" />
+                  <div className="absolute inset-0 bg-gradient-to-br from-blue-400 to-purple-400 rounded-xl blur opacity-30"></div>
                 </motion.div>
                 <div>
-                  <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 via-blue-900 to-purple-900 dark:from-white dark:via-blue-100 dark:to-purple-100 bg-clip-text text-transparent">
+                  <h1 className="text-xl font-bold bg-gradient-to-r from-gray-900 via-blue-900 to-purple-900 dark:from-white dark:via-blue-100 dark:to-purple-100 bg-clip-text text-transparent">
                     Grading Assistant
                   </h1>
-                  <p className="text-sm font-medium text-blue-600 dark:text-blue-400">AI-Powered Intelligence</p>
-              </div>
+                  <p className="text-xs font-medium text-blue-600 dark:text-blue-400">AI-Powered Intelligence</p>
+                </div>
               </div>
             </motion.div>
             
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-3">
               <motion.button
                 onClick={toggleTheme}
-                className="relative p-3 rounded-xl bg-white/50 dark:bg-gray-700/50 backdrop-blur-sm hover:bg-white/80 dark:hover:bg-gray-600/80 transition-all duration-300 shadow-lg hover:shadow-xl"
+                className="relative p-2 rounded-lg bg-white/50 dark:bg-gray-700/50 backdrop-blur-sm hover:bg-white/80 dark:hover:bg-gray-600/80 transition-all duration-300 shadow-lg hover:shadow-xl"
                 whileHover={{ scale: 1.1, rotate: 15 }}
                 whileTap={{ scale: 0.95 }}
               >
                 {isDarkMode ? (
-                  <Sun className="w-5 h-5 text-yellow-500" />
+                  <Sun className="w-4 h-4 text-yellow-500" />
                 ) : (
-                  <Moon className="w-5 h-5 text-indigo-600" />
+                  <Moon className="w-4 h-4 text-indigo-600" />
                 )}
               </motion.button>
 
               <motion.div 
-                className="hidden md:flex items-center space-x-4 bg-white/60 dark:bg-gray-700/60 backdrop-blur-xl rounded-2xl px-6 py-3 shadow-xl border border-white/20 dark:border-gray-600/20"
+                className="hidden md:flex items-center space-x-3 bg-white/60 dark:bg-gray-700/60 backdrop-blur-xl rounded-xl px-4 py-2 shadow-xl border border-white/20 dark:border-gray-600/20"
                 initial={{ opacity: 0, x: 30 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.5, duration: 0.6 }}
@@ -1492,120 +1492,146 @@ const SimpleDashboard: React.FC = () => {
         </div>
       </motion.header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Welcome Section */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {/* Welcome Section - Improved Accessibility */}
         <motion.div 
-          className="mb-8"
+          className="mb-6"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4, duration: 0.6 }}
         >
           <motion.div 
-            className="relative bg-gradient-to-r from-indigo-600 via-purple-600 to-blue-600 rounded-2xl p-8 text-white shadow-2xl overflow-hidden"
+            className="relative bg-gradient-to-r from-indigo-600 via-purple-600 to-blue-600 rounded-2xl p-3 text-white shadow-2xl overflow-hidden"
             whileHover={{ scale: 1.01 }}
             transition={{ type: "spring", stiffness: 300 }}
+            role="banner"
+            aria-label="Professor dashboard welcome section"
           >
             {/* Background Pattern */}
-            <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-white/5"></div>
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
-            <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
-            <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-6">
-              <motion.div
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.6 }}
-              >
-                <motion.h2 
-                  className="text-3xl lg:text-4xl font-bold mb-2 bg-gradient-to-r from-white to-blue-100 bg-clip-text text-transparent leading-tight"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
+            <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-white/5" aria-hidden="true"></div>
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl" aria-hidden="true"></div>
+            <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full blur-xl" aria-hidden="true"></div>
+            
+            {/* Three Column Layout */}
+            <div className="relative z-10">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Column 1 - Welcome */}
+                <motion.div
+                  className="flex flex-col justify-center"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.6 }}
+                >
+                  <motion.h1 
+                    className="text-lg font-bold text-white leading-tight mb-1"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.8 }}
+                    id="welcome-title"
+                  >
+                    Welcome, {professor?.name || 'Dr. Smith'}!
+                  </motion.h1>
+                  <p className="text-xs text-blue-200">
+                    Manage your assignments and track progress
+                  </p>
+                </motion.div>
+
+                {/* Column 2 - Subject Selection */}
+                <motion.div
+                  className="flex flex-col justify-center"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.8 }}
                 >
-                  Welcome, {professor?.name || 'Dr. Smith'}!
-                </motion.h2>
-                
-                <motion.p 
-                  className="text-lg text-blue-100"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 1.0 }}
-                >
-                  AI-Powered Grading Assistant
-                </motion.p>
-                
-                {/* Subject Selection Dropdown */}
-                {subjects.length > 0 && (
-                  <motion.div 
-                    className="mt-4"
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 1.2 }}
-                  >
-                    <label className="block text-sm font-medium text-blue-200 mb-2">
-                      Select Subject:
-                    </label>
-                    <div className="relative">
-                      <select
-                        value={selectedSubject?.id || ''}
-                onChange={(e) => {
-                  const subjectId = parseInt(e.target.value);
-                  const subject = subjects.find(s => s.id === subjectId);
-                  console.log('🔍 DEBUG: Subject changed:', { subjectId, subject });
-                  setSelectedSubject(subject || null);
-                }}
-                        className="bg-white/20 backdrop-blur-sm border border-white/30 rounded-lg px-4 py-2 pr-10 text-white focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent appearance-none cursor-pointer w-full"
+                  {subjects.length > 0 && (
+                    <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 border border-white/20">
+                      <label 
+                        htmlFor="subject-select"
+                        className="block text-sm font-semibold text-white mb-2"
                       >
-                        {subjects.map((subject) => (
-                          <option key={subject.id} value={subject.id} className="text-gray-800">
-                            {subject.code} - {subject.name}
-                          </option>
-                        ))}
-                      </select>
-                      {/* Custom dropdown arrow */}
-                      <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                        <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
+                        📚 Select Subject
+                      </label>
+                      <div className="relative">
+                        <select
+                          id="subject-select"
+                          value={selectedSubject?.id || ''}
+                          onChange={(e) => {
+                            const subjectId = parseInt(e.target.value);
+                            const subject = subjects.find(s => s.id === subjectId);
+                            console.log('🔍 DEBUG: Subject changed:', { subjectId, subject });
+                            setSelectedSubject(subject || null);
+                          }}
+                          className="bg-white/20 backdrop-blur-sm border border-white/30 rounded-lg px-3 py-2 pr-8 text-white focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent appearance-none cursor-pointer w-full text-sm"
+                          aria-describedby="subject-help"
+                        >
+                          <option value="" className="text-gray-800">Choose a subject...</option>
+                          {subjects.map((subject) => (
+                            <option key={subject.id} value={subject.id} className="text-gray-800">
+                              {subject.code} - {subject.name}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none" aria-hidden="true">
+                          <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
                       </div>
                     </div>
-                  </motion.div>
-                )}
-              </motion.div>
-              <motion.div
-                className="flex flex-col sm:flex-row items-center space-y-4 sm:space-y-0 sm:space-x-6 xl:mt-0"
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.8 }}
-              >
-                <div className="text-center">
-                  <div className="text-2xl font-bold">{stats.totalAssignments}</div>
-                  <div className="text-sm text-blue-200">
-                    {selectedSubject ? `${selectedSubject.code} Assignments` : 'Assignments'}
-                </div>
-              </div>
-                <div className="text-center">
-                  {isLoadingStats ? (
-                    <div className="flex items-center justify-center space-x-2">
-                      <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-200 border-t-transparent"></div>
-                      <div className="text-sm text-blue-200">Loading...</div>
-              </div>
-                  ) : stats.averageScore !== null ? (
-                    <>
-                  <div className="text-2xl font-bold">{stats.averageScore?.toFixed(2)}%</div>
-                      <div className="text-sm text-blue-200">
-                        {selectedSubject ? `${selectedSubject.code} Average` : 'Class Average'}
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="text-lg font-medium text-blue-200">No grades yet</div>
-                      <div className="text-sm text-blue-200">
-                        {selectedSubject ? `${selectedSubject.code} Average` : 'Class Average'}
-                      </div>
-                    </>
                   )}
+                </motion.div>
+
+                {/* Column 3 - Statistics */}
+                <motion.div
+                  className="flex flex-col justify-center"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 1.0 }}
+                >
+                  <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 border border-white/20">
+                    <h3 className="text-sm font-semibold text-white mb-2">📊 Quick Stats</h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      {/* Assignments Count */}
+                      <div className="text-center" role="img" aria-label={`${stats.totalAssignments} total assignments`}>
+                        <div className="text-lg font-bold text-white" aria-hidden="true">
+                          {stats.totalAssignments}
+                        </div>
+                        <div className="text-xs text-blue-200">
+                          {selectedSubject ? `${selectedSubject.code} Assignments` : 'Assignments'}
+                        </div>
+                      </div>
+
+                      {/* Average Score */}
+                      <div className="text-center" role="img" aria-label={`${stats.averageScore?.toFixed(2) || 'No'} average score`}>
+                        {isLoadingStats ? (
+                          <div className="flex flex-col items-center space-y-1">
+                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-200 border-t-transparent" aria-hidden="true"></div>
+                            <div className="text-xs text-blue-200">Loading...</div>
+                          </div>
+                        ) : stats.averageScore !== null ? (
+                          <>
+                            <div className="text-lg font-bold text-white" aria-hidden="true">
+                              {stats.averageScore?.toFixed(1)}%
+                            </div>
+                            <div className="text-xs text-blue-200">
+                              {selectedSubject ? `${selectedSubject.code} Avg` : 'Class Avg'}
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="text-sm font-medium text-blue-200" aria-hidden="true">
+                              No grades
+                            </div>
+                            <div className="text-xs text-blue-200">
+                              {selectedSubject ? `${selectedSubject.code} Avg` : 'Class Avg'}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
               </div>
-              </motion.div>
             </div>
           </motion.div>
         </motion.div>
@@ -1647,7 +1673,7 @@ const SimpleDashboard: React.FC = () => {
                   </motion.div>
                   <div className="flex-1">
                     <h3 className="text-2xl font-bold bg-gradient-to-r from-gray-900 via-blue-900 to-purple-900 dark:from-white dark:via-blue-100 dark:to-purple-100 bg-clip-text text-transparent">
-                      AI Assistant
+                      GradeMaster
                     </h3>
                     <p className="text-sm font-medium text-blue-600 dark:text-blue-400">Your intelligent grading companion</p>
                   </div>
