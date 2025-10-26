@@ -959,3 +959,33 @@ def download_assignment_csv(assignment_id):
         
     except Exception as e:
         return jsonify({'error': f'Failed to generate CSV: {str(e)}'}), 500
+
+@main_bp.route('/api/assignments/<int:assignment_id>', methods=['DELETE'])
+def delete_assignment(assignment_id):
+    """
+    Delete an assignment and all related data
+    """
+    try:
+        # Get the assignment
+        assignment = Assignment.query.get(assignment_id)
+        if not assignment:
+            return jsonify({'error': 'Assignment not found'}), 404
+        
+        # Delete related grading reports
+        GradingReport.query.filter_by(assignment_id=assignment_id).delete()
+        
+        # Delete related submission results
+        SubmissionResult.query.filter_by(assignment_id=assignment_id).delete()
+        
+        # Delete the assignment
+        db.session.delete(assignment)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Assignment "{assignment.title}" deleted successfully'
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Failed to delete assignment: {str(e)}'}), 500

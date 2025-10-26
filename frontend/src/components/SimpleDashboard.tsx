@@ -10,7 +10,8 @@ import {
   Target,
   Users,
   Eye,
-  Download
+  Download,
+  Trash2
 } from 'lucide-react';
 
 interface Professor {
@@ -29,6 +30,7 @@ interface Assignment {
   professor_id: number;
   created_at: string;
   average_score?: number; // Optional average score for the assignment
+  is_graded?: boolean; // Whether the assignment has been graded
 }
 
 interface ChatMessage {
@@ -38,11 +40,12 @@ interface ChatMessage {
 }
 
 // Memoized Assignment Card Component to prevent unnecessary re-renders
-const AssignmentCard = React.memo(({ assignment, index, onViewGrades, onDownloadCSV }: { 
+const AssignmentCard = React.memo(({ assignment, index, onViewGrades, onDownloadCSV, onDeleteAssignment }: { 
   assignment: Assignment; 
   index: number;
   onViewGrades: (assignment: Assignment) => void;
   onDownloadCSV: (assignment: Assignment) => void;
+  onDeleteAssignment: (assignment: Assignment) => void;
 }) => {
   return (
     <motion.div 
@@ -84,7 +87,7 @@ const AssignmentCard = React.memo(({ assignment, index, onViewGrades, onDownload
               <div className="flex items-center space-x-1">
                 <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                 <span className="font-medium text-green-600 dark:text-green-400">
-                  Avg: {assignment.average_score}%
+                  Avg: {assignment.average_score?.toFixed(2)}%
                 </span>
               </div>
             )}
@@ -94,35 +97,54 @@ const AssignmentCard = React.memo(({ assignment, index, onViewGrades, onDownload
       
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-2">
-          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-          <span className="text-sm text-gray-600 dark:text-gray-400">Active</span>
+          <div className={`w-2 h-2 rounded-full ${assignment.is_graded ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
+          <span className={`text-sm ${assignment.is_graded ? 'text-green-600 dark:text-green-400' : 'text-yellow-600 dark:text-yellow-400'}`}>
+            {assignment.is_graded ? 'Graded' : 'Ungraded'}
+          </span>
         </div>
         
         <div className="flex space-x-2">
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={(e) => {
-              e.stopPropagation();
-              onViewGrades(assignment);
-            }}
-            className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-lg text-xs font-medium flex items-center space-x-1 transition-colors"
-          >
-            <Eye className="w-3 h-3" />
-            <span>View</span>
-          </motion.button>
+          {assignment.is_graded && (
+            <>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onViewGrades(assignment);
+                }}
+                className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-lg text-xs font-medium flex items-center space-x-1 transition-colors"
+              >
+                <Eye className="w-3 h-3" />
+                <span>View</span>
+              </motion.button>
+              
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDownloadCSV(assignment);
+                }}
+                className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-lg text-xs font-medium flex items-center space-x-1 transition-colors"
+              >
+                <Download className="w-3 h-3" />
+                <span>CSV</span>
+              </motion.button>
+            </>
+          )}
           
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={(e) => {
               e.stopPropagation();
-              onDownloadCSV(assignment);
+              onDeleteAssignment(assignment);
             }}
-            className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-lg text-xs font-medium flex items-center space-x-1 transition-colors"
+            className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-lg text-xs font-medium flex items-center space-x-1 transition-colors"
           >
-            <Download className="w-3 h-3" />
-            <span>CSV</span>
+            <Trash2 className="w-3 h-3" />
+            <span>Delete</span>
           </motion.button>
         </div>
       </div>
@@ -181,6 +203,11 @@ const SimpleDashboard: React.FC = () => {
   const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
   const [gradesData, setGradesData] = useState<any[]>([]);
   const [isLoadingGrades, setIsLoadingGrades] = useState(false);
+  
+  // Delete confirmation state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [assignmentToDelete, setAssignmentToDelete] = useState<Assignment | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // State persistence functions
   const saveChatbotState = () => {
@@ -313,6 +340,48 @@ const SimpleDashboard: React.FC = () => {
     }
   };
 
+  // Handle delete assignment
+  const handleDeleteAssignment = (assignment: Assignment) => {
+    setAssignmentToDelete(assignment);
+    setShowDeleteModal(true);
+  };
+
+  // Confirm delete assignment
+  const confirmDeleteAssignment = async () => {
+    if (!assignmentToDelete) return;
+    
+    setIsDeleting(true);
+    try {
+      const response = await fetch(`http://localhost:5002/api/assignments/${assignmentToDelete.id}`, {
+        method: 'DELETE'
+      });
+      
+      if (response.ok) {
+        // Remove assignment from local state
+        setAssignments(prev => prev.filter(a => a.id !== assignmentToDelete.id));
+        
+        // Refresh class average and assignment averages
+        fetchClassAverage();
+        fetchAssignmentAverages();
+        
+        // Show success message
+        addBotMessage(`🗑️ **Assignment Deleted Successfully!**\n\nAssignment "${assignmentToDelete.title}" has been permanently deleted along with all its grades and submissions.`);
+        
+        setShowDeleteModal(false);
+        setAssignmentToDelete(null);
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Failed to delete assignment:', response.status, errorData);
+        addBotMessage(`❌ **Error deleting assignment:** ${errorData.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Error deleting assignment:', error);
+      addBotMessage(`❌ **Error deleting assignment:** ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   // Stats calculation - using useMemo to prevent unnecessary re-renders
   const [classAverage, setClassAverage] = useState<number | null>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(false);
@@ -329,8 +398,33 @@ const SimpleDashboard: React.FC = () => {
       const response = await fetch('http://localhost:5002/api/assignments');
       if (response.ok) {
         const assignmentsData = await response.json();
+        
+        // Check graded status for each assignment using the average API
+        const assignmentsWithStatus = await Promise.all(
+          assignmentsData.map(async (assignment: Assignment) => {
+            try {
+              const averageResponse = await fetch(`http://localhost:5002/api/assignments/${assignment.id}/average`);
+              if (averageResponse.ok) {
+                const averageData = await averageResponse.json();
+                const isGraded = averageData.average_score != null;
+                console.log(`🔍 Assignment ${assignment.id} (${assignment.title}): average_score=${averageData.average_score}, is_graded=${isGraded}`);
+                return {
+                  ...assignment,
+                  is_graded: isGraded
+                };
+              }
+            } catch (error) {
+              console.error(`Error checking average for assignment ${assignment.id}:`, error);
+            }
+            return {
+              ...assignment,
+              is_graded: false
+            };
+          })
+        );
+        
         // Sort by created_at in descending order (newest first)
-        const sortedAssignments = assignmentsData.sort((a: Assignment, b: Assignment) => 
+        const sortedAssignments = assignmentsWithStatus.sort((a: Assignment, b: Assignment) => 
           new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         );
         setAssignments(sortedAssignments);
@@ -1029,12 +1123,12 @@ const SimpleDashboard: React.FC = () => {
             if (status.status === 'completed') {
               // Grading complete!
               setGradingProgress(100);
-              addBotMessage(`🎉 **Grading Complete!**\n\n✅ ${status.total_submissions} submissions graded\n📊 Average score: ${status.average_score}%\n\nCheck the analytics dashboard for detailed insights!`);
+              addBotMessage(`🎉 **Grading Complete!**\n\n✅ ${status.total_submissions} submissions graded\n📊 Average score: ${status.average_score?.toFixed(2)}%\n\nCheck the analytics dashboard for detailed insights!`);
         
         // Show notification
         if ('Notification' in window && Notification.permission === 'granted') {
           new Notification('Grading Complete!', {
-                  body: `Graded ${status.total_submissions} submissions with average score of ${status.average_score}%`,
+                  body: `Graded ${status.total_submissions} submissions with average score of ${status.average_score?.toFixed(2)}%`,
             icon: '/logo192.png'
           });
         }
@@ -1131,7 +1225,7 @@ const SimpleDashboard: React.FC = () => {
     } else if (userInput.includes('download') || userInput.includes('csv') || userInput.includes('export')) {
       addBotMessage("📊 **CSV Downloads & Reports:**\n\n**Available Reports:**\n• **Grade Book Export** - Complete grading data\n• **Performance Analytics** - Student progress trends\n• **Submission Statistics** - Assignment completion rates\n• **Custom Reports** - Tailored analytics\n\n**How to Download:**\n1. Click 'Download CSV' on any assignment card\n2. Choose your preferred format\n3. Get instant download with detailed data\n\nPerfect for grade book integration and analysis!");
     } else if (userInput.includes('analytics') || userInput.includes('stats') || userInput.includes('performance')) {
-      const averageText = stats.averageScore !== null ? stats.averageScore + "%" : "No grades yet";
+      const averageText = stats.averageScore !== null ? stats.averageScore.toFixed(2) + "%" : "No grades yet";
       addBotMessage("📈 **Analytics & Performance:**\n\n**Key Metrics Available:**\n• **Assignment Statistics** - Total assignments and performance\n• **Grade Distribution** - Performance across students\n• **Trend Analysis** - Progress over time\n• **Class Performance** - Overall class averages\n\n**Dashboard Overview:**\n• Total Assignments: " + stats.totalAssignments + "\n• Class Average: " + averageText + "\n\nClick on any assignment card for detailed analytics!");
     } else if (userInput.includes('navigate') || userInput.includes('tour') || userInput.includes('around')) {
       addBotMessage("🗺️ **Dashboard Navigation Guide:**\n\n**Left Side - AI Assistant:**\n• Chat with me for help and support\n• Quick action buttons for common tasks\n• Assignment creation workflow\n\n**Right Side - Your Assignments:**\n• View all your assignments\n• Click cards for detailed information\n• Access submissions and analytics\n\n**Top Section - Overview:**\n• Welcome message with your info\n• Key statistics and metrics\n• Quick access to main features\n\n**Need help with anything specific?** Just ask!");
@@ -1266,7 +1360,7 @@ const SimpleDashboard: React.FC = () => {
               </div>
                   ) : stats.averageScore !== null ? (
                     <>
-                  <div className="text-2xl font-bold">{stats.averageScore}%</div>
+                  <div className="text-2xl font-bold">{stats.averageScore?.toFixed(2)}%</div>
                       <div className="text-sm text-blue-200">Class Average</div>
                     </>
                   ) : (
@@ -1796,6 +1890,7 @@ const SimpleDashboard: React.FC = () => {
                         index={index}
                         onViewGrades={handleViewGrades}
                         onDownloadCSV={handleDownloadCSV}
+                        onDeleteAssignment={handleDeleteAssignment}
                       />
                     ))}
                   </div>
@@ -2023,6 +2118,85 @@ const SimpleDashboard: React.FC = () => {
                 <span>Download CSV</span>
               </button>
           </div>
+          </motion.div>
+        </motion.div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && assignmentToDelete && (
+        <motion.div 
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={() => setShowDeleteModal(false)}
+        >
+          <motion.div 
+            className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full"
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6">
+              <div className="flex items-center space-x-3 mb-4">
+                <div className="w-12 h-12 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center">
+                  <Trash2 className="w-6 h-6 text-red-600 dark:text-red-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                    Delete Assignment
+                  </h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    This action cannot be undone
+                  </p>
+                </div>
+              </div>
+              
+              <div className="mb-6">
+                <p className="text-gray-700 dark:text-gray-300 mb-2">
+                  Are you sure you want to delete this assignment?
+                </p>
+                <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+                  <p className="font-medium text-gray-900 dark:text-white">
+                    {assignmentToDelete.title}
+                  </p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    {assignmentToDelete.description}
+                  </p>
+                </div>
+                <p className="text-sm text-red-600 dark:text-red-400 mt-2">
+                  ⚠️ This will permanently delete all grades, submissions, and related data.
+                </p>
+              </div>
+              
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => setShowDeleteModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                  disabled={isDeleting}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDeleteAssignment}
+                  disabled={isDeleting}
+                  className="flex-1 bg-red-500 hover:bg-red-600 disabled:bg-red-300 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center justify-center space-x-2"
+                >
+                  {isDeleting ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                      <span>Deleting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4" />
+                      <span>Delete</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
           </motion.div>
         </motion.div>
       )}
