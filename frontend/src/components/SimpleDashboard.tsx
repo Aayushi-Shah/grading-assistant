@@ -185,7 +185,7 @@ const SimpleDashboard: React.FC = () => {
       if (professorId) {
         console.log(`Fetching professor with ID: ${professorId}`);
         try {
-          const professorResponse = await fetch(`/api/professors/${professorId}`);
+          const professorResponse = await fetch(`http://localhost:5002/api/professors/${professorId}`);
           if (professorResponse.ok) {
             selectedProfessor = await professorResponse.json();
             console.log('Professor found:', selectedProfessor);
@@ -201,7 +201,7 @@ const SimpleDashboard: React.FC = () => {
       if (!selectedProfessor) {
         console.log('Fetching all professors as fallback...');
         try {
-          const professorResponse = await fetch('/api/professors');
+          const professorResponse = await fetch('http://localhost:5002/api/professors');
           if (professorResponse.ok) {
       const professors = await professorResponse.json();
       if (professors.length > 0) {
@@ -221,7 +221,7 @@ const SimpleDashboard: React.FC = () => {
 
       // Fetch assignments for the selected professor
       console.log('Fetching assignments...');
-      const assignmentsResponse = await fetch('/api/assignments');
+      const assignmentsResponse = await fetch('http://localhost:5002/api/assignments');
       if (assignmentsResponse.ok) {
       const assignmentsData = await assignmentsResponse.json();
       setAssignments(assignmentsData);
@@ -320,7 +320,7 @@ const SimpleDashboard: React.FC = () => {
       console.log('File attached to FormData:', fileToUpload.name, fileToUpload.size);
 
       // Upload file and create assignment
-      const uploadResponse = await fetch('/api/upload-question-file', {
+      const uploadResponse = await fetch('http://localhost:5002/api/upload-question-file', {
         method: 'POST',
         body: formData
       });
@@ -334,7 +334,7 @@ const SimpleDashboard: React.FC = () => {
       console.log('Upload result:', uploadResult);
       
       // Step 2: Generate solution using the assignment ID
-      const solutionResponse = await fetch(`/api/generate-solution/${uploadResult.assignment_id}`, {
+      const solutionResponse = await fetch(`http://localhost:5002/api/generate-solution/${uploadResult.assignment_id}`, {
         method: 'POST'
       });
 
@@ -409,7 +409,7 @@ const SimpleDashboard: React.FC = () => {
       
       addBotMessage(`⏳ **Uploading and processing... This may take up to a minute...**\n\nPlease wait while the system:\n• Uploads your ZIP file\n• Extracts all Python files\n• Generates a reference solution\n• Grades each student submission`);
       
-      const uploadResponse = await fetch(`/api/assignments/${assignmentData.assignmentId}/upload`, {
+      const uploadResponse = await fetch(`http://localhost:5002/api/assignments/${assignmentData.assignmentId}/upload`, {
         method: 'POST',
         body: uploadFormData
       });
@@ -445,7 +445,7 @@ const SimpleDashboard: React.FC = () => {
       }, 1000);
 
       // Call the proper grading API endpoint
-      const response = await fetch(`/api/assignments/${assignmentId}/grade`, {
+      const response = await fetch(`http://localhost:5002/api/assignments/${assignmentId}/grade`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

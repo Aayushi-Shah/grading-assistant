@@ -23,7 +23,7 @@
     "web-vitals": "^2.1.4"
   },
   "scripts": {
-    "start": "DISABLE_ESLINT_PLUGIN=true react-scripts start",
+    "start": "DISABLE_ESLINT_PLUGIN=true PORT=3002 react-scripts start",
     "build": "SKIP_PREFLIGHT_CHECK=true GENERATE_SOURCEMAP=false DISABLE_ESLINT_PLUGIN=true react-scripts build",
     "build:simple": "SKIP_PREFLIGHT_CHECK=true GENERATE_SOURCEMAP=false DISABLE_ESLINT_PLUGIN=true CI=false react-scripts build",
     "test": "react-scripts test",

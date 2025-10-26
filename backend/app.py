@@ -12,7 +12,7 @@ app.config.from_object(Config)
 # Initialize extensions
 db.init_app(app)
 migrate = Migrate(app, db)
-CORS(app, origins=['http://localhost:3000', 'http://localhost:5001'])
+CORS(app, origins=['http://localhost:3002', 'http://localhost:5002'])
 
 # Create upload directory if it doesn't exist
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -43,4 +43,4 @@ if __name__ == '__main__':
         db.create_all()
     
     # Start server with debug mode but without auto-reloader to avoid import issues
-    app.run(debug=True, host='0.0.0.0', port=5001, threaded=True, use_reloader=False)
+    app.run(debug=True, host='0.0.0.0', port=5002, threaded=True, use_reloader=False)
