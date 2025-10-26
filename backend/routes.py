@@ -822,6 +822,89 @@ def get_assignment_grades(assignment_id):
     except Exception as e:
         return jsonify({'error': f'Failed to get grades: {str(e)}'}), 500
 
+@main_bp.route('/api/class-average', methods=['GET'])
+def get_class_average():
+    """
+    Get overall class average across all assignments
+    Class average = average of all assignment averages
+    """
+    try:
+        # Get all grading reports to calculate overall average
+        grading_reports = GradingReport.query.filter(GradingReport.average_score.isnot(None)).all()
+        
+        if not grading_reports:
+            return jsonify({
+                'success': True,
+                'class_average': None,
+                'total_assignments': 0,
+                'graded_assignments': 0,
+                'message': 'No grades available yet'
+            }), 200
+        
+        # Calculate simple average of assignment averages
+        assignment_averages = []
+        total_submissions = 0
+        
+        for report in grading_reports:
+            if report.average_score is not None:
+                assignment_averages.append(report.average_score)
+                total_submissions += report.total_submissions or 0
+        
+        if not assignment_averages:
+            return jsonify({
+                'success': True,
+                'class_average': None,
+                'total_assignments': len(grading_reports),
+                'graded_assignments': 0,
+                'message': 'No assignment averages available'
+            }), 200
+        
+        # Calculate class average as the average of all assignment averages
+        class_average = round(sum(assignment_averages) / len(assignment_averages), 1)
+        
+        return jsonify({
+            'success': True,
+            'class_average': class_average,
+            'total_assignments': len(grading_reports),
+            'graded_assignments': len(assignment_averages),
+            'total_submissions': total_submissions,
+            'assignment_averages': assignment_averages  # For debugging
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': f'Failed to get class average: {str(e)}'}), 500
+
+@main_bp.route('/api/assignments/<int:assignment_id>/average', methods=['GET'])
+def get_assignment_average(assignment_id):
+    """
+    Get average score for a specific assignment
+    """
+    try:
+        # Get the latest grading report for this assignment
+        latest_report = GradingReport.query.filter_by(assignment_id=assignment_id).order_by(GradingReport.created_at.desc()).first()
+        
+        if not latest_report or latest_report.average_score is None:
+            return jsonify({
+                'success': True,
+                'assignment_id': assignment_id,
+                'average_score': None,
+                'total_submissions': 0,
+                'graded_submissions': 0,
+                'message': 'No grades available for this assignment'
+            }), 200
+        
+        return jsonify({
+            'success': True,
+            'assignment_id': assignment_id,
+            'average_score': latest_report.average_score,
+            'total_submissions': latest_report.total_submissions,
+            'graded_submissions': latest_report.graded_submissions,
+            'graded_at': latest_report.created_at.isoformat() if latest_report.created_at else None
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': f'Failed to get assignment average: {str(e)}'}), 500
+
 @main_bp.route('/api/assignments/<int:assignment_id>/download-csv', methods=['GET'])
 def download_assignment_csv(assignment_id):
     """

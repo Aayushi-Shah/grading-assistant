@@ -28,6 +28,7 @@ interface Assignment {
   max_points: number;
   professor_id: number;
   created_at: string;
+  average_score?: number; // Optional average score for the assignment
 }
 
 interface ChatMessage {
@@ -79,6 +80,14 @@ const AssignmentCard = React.memo(({ assignment, index, onViewGrades, onDownload
               <Target className="w-4 h-4" />
               <span>{assignment.max_points} pts</span>
             </div>
+            {assignment.average_score !== null && assignment.average_score !== undefined && (
+              <div className="flex items-center space-x-1">
+                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                <span className="font-medium text-green-600 dark:text-green-400">
+                  Avg: {assignment.average_score}%
+                </span>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -290,12 +299,34 @@ const SimpleDashboard: React.FC = () => {
     }
   };
 
-  // Stats calculation
-  const stats = {
+  // Stats calculation - using useMemo to prevent unnecessary re-renders
+  const [classAverage, setClassAverage] = useState<number | null>(null);
+  const [isLoadingStats, setIsLoadingStats] = useState(false);
+  
+  const stats = useMemo(() => ({
     totalAssignments: assignments.length,
-    totalSubmissions: assignments.reduce((sum, assignment) => sum + Math.floor(Math.random() * 20) + 5, 0),
-    averageScore: Math.floor(Math.random() * 20) + 75
-  };
+    averageScore: classAverage
+  }), [assignments.length, classAverage]);
+
+  // Fetch class average from API
+  const fetchClassAverage = useCallback(async () => {
+    setIsLoadingStats(true);
+    try {
+      const response = await fetch('http://localhost:5002/api/class-average');
+      if (response.ok) {
+        const data = await response.json();
+        setClassAverage(data.class_average);
+      } else {
+        console.error('Failed to fetch class average:', response.status);
+        setClassAverage(null);
+      }
+    } catch (error) {
+      console.error('Error fetching class average:', error);
+      setClassAverage(null);
+    } finally {
+      setIsLoadingStats(false);
+    }
+  }, []);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme');
@@ -304,6 +335,43 @@ const SimpleDashboard: React.FC = () => {
       document.documentElement.classList.add('dark');
     }
   }, []);
+
+  // Fetch assignment averages for each assignment
+  const fetchAssignmentAverages = useCallback(async () => {
+    if (assignments.length === 0) return;
+    
+    try {
+      const promises = assignments.map(async (assignment) => {
+        try {
+          const response = await fetch(`http://localhost:5002/api/assignments/${assignment.id}/average`);
+          if (response.ok) {
+            const data = await response.json();
+            return { ...assignment, average_score: data.average_score };
+          }
+        } catch (error) {
+          console.error(`Error fetching average for assignment ${assignment.id}:`, error);
+        }
+        return assignment;
+      });
+      
+      const updatedAssignments = await Promise.all(promises);
+      setAssignments(updatedAssignments);
+    } catch (error) {
+      console.error('Error fetching assignment averages:', error);
+    }
+  }, [assignments.length]);
+
+  // Fetch class average when component mounts
+  useEffect(() => {
+    fetchClassAverage();
+  }, [fetchClassAverage]);
+
+  // Fetch assignment averages when assignments change
+  useEffect(() => {
+    if (assignments.length > 0) {
+      fetchAssignmentAverages();
+    }
+  }, [assignments.length]); // Only run when assignments count changes, not on every assignment update
 
   const toggleTheme = () => {
     const newTheme = !isDarkMode;
@@ -615,6 +683,10 @@ const SimpleDashboard: React.FC = () => {
       
       addBotMessage(`✅ **Grading completed successfully!**\n\nThe system has:\n• Extracted ${uploadResult.total_submissions || 'multiple'} Python files\n• Generated a reference solution\n• Graded each student submission\n• Saved results to the database\n\n🎉 **You can now view the complete grading report!**`);
       
+      // Refresh class average and assignment averages after grading
+      fetchClassAverage();
+      fetchAssignmentAverages();
+      
       // Reset workflow
       setCurrentStep(0);
       
@@ -671,6 +743,10 @@ const SimpleDashboard: React.FC = () => {
                   icon: '/logo192.png'
                 });
               }
+              
+              // Refresh class average and assignment averages after grading completion
+              fetchClassAverage();
+              fetchAssignmentAverages();
               
               setIsGrading(false);
               setCurrentStep(0);
@@ -746,7 +822,8 @@ const SimpleDashboard: React.FC = () => {
     } else if (userInput.includes('download') || userInput.includes('csv') || userInput.includes('export')) {
       addBotMessage("📊 **CSV Downloads & Reports:**\n\n**Available Reports:**\n• **Grade Book Export** - Complete grading data\n• **Performance Analytics** - Student progress trends\n• **Submission Statistics** - Assignment completion rates\n• **Custom Reports** - Tailored analytics\n\n**How to Download:**\n1. Click 'Download CSV' on any assignment card\n2. Choose your preferred format\n3. Get instant download with detailed data\n\nPerfect for grade book integration and analysis!");
     } else if (userInput.includes('analytics') || userInput.includes('stats') || userInput.includes('performance')) {
-      addBotMessage("📈 **Analytics & Performance:**\n\n**Key Metrics Available:**\n• **Assignment Statistics** - Total assignments and submissions\n• **Grade Distribution** - Performance across students\n• **Trend Analysis** - Progress over time\n• **Completion Rates** - Submission patterns\n\n**Dashboard Overview:**\n• Total Assignments: " + stats.totalAssignments + "\n• Total Submissions: " + stats.totalSubmissions + "\n• Average Score: " + stats.averageScore + "%\n\nClick on any assignment card for detailed analytics!");
+      const averageText = stats.averageScore !== null ? stats.averageScore + "%" : "No grades yet";
+      addBotMessage("📈 **Analytics & Performance:**\n\n**Key Metrics Available:**\n• **Assignment Statistics** - Total assignments and performance\n• **Grade Distribution** - Performance across students\n• **Trend Analysis** - Progress over time\n• **Class Performance** - Overall class averages\n\n**Dashboard Overview:**\n• Total Assignments: " + stats.totalAssignments + "\n• Class Average: " + averageText + "\n\nClick on any assignment card for detailed analytics!");
     } else if (userInput.includes('navigate') || userInput.includes('tour') || userInput.includes('around')) {
       addBotMessage("🗺️ **Dashboard Navigation Guide:**\n\n**Left Side - AI Assistant:**\n• Chat with me for help and support\n• Quick action buttons for common tasks\n• Assignment creation workflow\n\n**Right Side - Your Assignments:**\n• View all your assignments\n• Click cards for detailed information\n• Access submissions and analytics\n\n**Top Section - Overview:**\n• Welcome message with your info\n• Key statistics and metrics\n• Quick access to main features\n\n**Need help with anything specific?** Just ask!");
     } else if (userInput.includes('settings') || userInput.includes('preferences') || userInput.includes('theme')) {
@@ -873,12 +950,22 @@ const SimpleDashboard: React.FC = () => {
                   <div className="text-sm text-blue-200">Assignments</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-2xl font-bold">{stats.totalSubmissions}</div>
-                  <div className="text-sm text-blue-200">Submissions</div>
-              </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold">{stats.averageScore}%</div>
-                  <div className="text-sm text-blue-200">Avg Score</div>
+                  {isLoadingStats ? (
+                    <div className="flex items-center justify-center space-x-2">
+                      <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-200 border-t-transparent"></div>
+                      <div className="text-sm text-blue-200">Loading...</div>
+                    </div>
+                  ) : stats.averageScore !== null ? (
+                    <>
+                      <div className="text-2xl font-bold">{stats.averageScore}%</div>
+                      <div className="text-sm text-blue-200">Class Average</div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-lg font-medium text-blue-200">No grades yet</div>
+                      <div className="text-sm text-blue-200">Class Average</div>
+                    </>
+                  )}
               </div>
               </motion.div>
             </div>
