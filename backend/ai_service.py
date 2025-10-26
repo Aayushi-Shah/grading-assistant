@@ -4,7 +4,8 @@ import json
 import re
 from dotenv import load_dotenv
 
-load_dotenv()
+# Load .env file from the parent directory (project root)
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
 
 def test_gemini():
@@ -35,24 +36,44 @@ def generate_solution(assignment_description, rubric, max_points):
     """
     model = genai.GenerativeModel('gemini-2.5-flash')
     
-    prompt = f"""You are an expert programming instructor. Generate a reference solution.
+    # Debug: Print the assignment content being sent to AI
+    print(f"🔍 DEBUG: Assignment content being sent to AI:")
+    print(f"Content: {assignment_description[:500]}...")
+    print(f"Content length: {len(assignment_description)}")
+    
+    prompt = f"""You are an expert programming instructor. Generate a SIMPLE, DIRECT solution based on the ACTUAL ASSIGNMENT CONTENT provided below.
 
-Assignment Description:
+CRITICAL INSTRUCTIONS:
+- Focus on the ASSIGNMENT CONTENT FROM UPLOADED FILE (if present) - this is the primary source
+- Ignore generic titles and focus on the specific requirements in the file content
+- Generate ONLY what is specifically requested in the assignment content
+- Keep the solution SIMPLE and STRAIGHTFORWARD
+- Match the exact output format if examples are provided in the file content
+
+ASSIGNMENT CONTENT:
 {assignment_description}
 
-Grading Rubric:
+GRADING CRITERIA:
 {rubric}
 
-Maximum Points: {max_points}
+MAXIMUM POINTS: {max_points}
 
-Requirements:
-1. Write clean, well-commented Python code
-2. Implement all features from the assignment description
-3. Follow Python best practices
-4. Output ONLY the code, no markdown or explanations
-5. Ensure the code is executable and complete
+SOLUTION GUIDELINES:
+1. Read the assignment content carefully - focus on the actual requirements, not just the title
+2. Generate a simple, working Python program that fulfills the specific requirements
+3. Include only the functionality explicitly requested in the assignment content
+4. Use basic Python constructs (input, print, variables)
+5. Follow the exact output format if examples are provided in the assignment
+6. Add minimal comments only where necessary
+7. Do NOT add complex error handling unless explicitly requested
+8. Do NOT add unnecessary functions or classes unless requested
 
-Python Code:"""
+IMPORTANT: 
+- If the assignment content contains specific requirements, follow those exactly
+- If there are sample outputs or examples in the assignment, match them precisely
+- The assignment title is just for reference - focus on the actual content and requirements
+
+Generate the Python solution:"""
     
     try:
         response = model.generate_content(prompt)
@@ -63,6 +84,11 @@ Python Code:"""
             code = code.split('```python')[1].split('```')[0].strip()
         elif code.startswith('```'):
             code = code.split('```')[1].split('```')[0].strip()
+        
+        # Debug: Print the generated solution
+        print(f"🤖 DEBUG: Generated solution preview:")
+        print(f"Solution length: {len(code)}")
+        print(f"Solution preview: {code[:200]}...")
             
         return code
     except Exception as e:

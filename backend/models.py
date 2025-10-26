@@ -42,6 +42,7 @@ class Assignment(db.Model):
     # File paths for uploaded assignments
     zip_file_path = db.Column(db.String(500))
     extracted_folder_path = db.Column(db.String(500))
+    question_file_path = db.Column(db.String(500))  # Path to uploaded question file (DOCX, PDF, TXT)
     
     # LLM Integration fields (commented out for now to fix schema issues)
     # ideal_solution = db.Column(Text)
@@ -66,7 +67,8 @@ class Assignment(db.Model):
             'professor_id': self.professor_id,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'zip_file_path': self.zip_file_path,
-            'extracted_folder_path': self.extracted_folder_path
+            'extracted_folder_path': self.extracted_folder_path,
+            'question_file_path': self.question_file_path
         }
 
 class GradingReport(db.Model):

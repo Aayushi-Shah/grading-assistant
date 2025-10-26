@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { 
   FileText, 
@@ -8,7 +8,9 @@ import {
   GraduationCap,
   Calendar,
   Target,
-  Users
+  Users,
+  Eye,
+  Download
 } from 'lucide-react';
 
 interface Professor {
@@ -34,12 +36,104 @@ interface ChatMessage {
   isUser: boolean;
 }
 
+// Memoized Assignment Card Component to prevent unnecessary re-renders
+const AssignmentCard = React.memo(({ assignment, index }: { assignment: Assignment; index: number }) => {
+  return (
+    <motion.div 
+      key={assignment.id} 
+      className="bg-gradient-to-br from-white to-blue-50/30 dark:from-gray-700 dark:to-gray-600/30 rounded-2xl border border-gray-200/50 dark:border-gray-600/50 p-6 hover:shadow-xl transition-all duration-300 cursor-pointer group"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 1.2 + index * 0.1, duration: 0.4 }}
+      whileHover={{ 
+        scale: 1.02, 
+        boxShadow: "0 10px 25px rgba(0,0,0,0.1)" 
+      }}
+    >
+      <div className="flex items-start justify-between mb-4">
+        <div className="flex-1">
+          <div className="flex items-center space-x-3 mb-3">
+            <div className="bg-blue-100 dark:bg-blue-900/20 p-2 rounded-lg group-hover:bg-blue-200 dark:group-hover:bg-blue-800/30 transition-colors">
+              <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+            </div>
+            <h4 className="text-lg font-semibold text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+              {assignment.title}
+            </h4>
+          </div>
+          
+          <p className="text-gray-600 dark:text-gray-300 text-sm mb-4 line-clamp-2">
+            {assignment.description}
+          </p>
+          
+          <div className="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400">
+            <div className="flex items-center space-x-1">
+              <Calendar className="w-4 h-4" />
+              <span>Due: {new Date(assignment.due_date).toLocaleDateString()}</span>
+            </div>
+            <div className="flex items-center space-x-1">
+              <Target className="w-4 h-4" />
+              <span>{assignment.max_points} pts</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-2">
+          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+          <span className="text-sm text-gray-600 dark:text-gray-400">Active</span>
+        </div>
+        
+        <div className="flex space-x-2">
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-lg text-xs font-medium flex items-center space-x-1 transition-colors"
+          >
+            <Eye className="w-3 h-3" />
+            <span>View</span>
+          </motion.button>
+          
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-lg text-xs font-medium flex items-center space-x-1 transition-colors"
+          >
+            <Download className="w-3 h-3" />
+            <span>CSV</span>
+          </motion.button>
+        </div>
+      </div>
+    </motion.div>
+  );
+});
+
 const SimpleDashboard: React.FC = () => {
   const [professor, setProfessor] = useState<Professor | null>(null);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
+  
+  // Memoize assignments to prevent unnecessary re-renders
+  const memoizedAssignments = useMemo(() => assignments, [assignments]);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
+  const [currentStep, setCurrentStep] = useState(0);
+  
+  // Assignment creation workflow state
+  const [assignmentData, setAssignmentData] = useState({
+    title: '',
+    description: '',
+    file: null as File | null,
+    solution: '',
+    rubrics: '',
+    maxPoints: 100
+  });
+
+  const [isGeneratingSolution, setIsGeneratingSolution] = useState(false);
+  const [isGrading, setIsGrading] = useState(false);
+  const [gradingProgress, setGradingProgress] = useState(0);
+  const [showSolutionModal, setShowSolutionModal] = useState(false);
+  const [solutionChangeCount, setSolutionChangeCount] = useState(0);
 
   // Stats calculation
   const stats = {
@@ -108,8 +202,8 @@ const SimpleDashboard: React.FC = () => {
         try {
           const professorResponse = await fetch('/api/professors');
           if (professorResponse.ok) {
-            const professors = await professorResponse.json();
-            if (professors.length > 0) {
+      const professors = await professorResponse.json();
+      if (professors.length > 0) {
               selectedProfessor = professors[0];
               console.log('Using first professor as fallback:', selectedProfessor);
             } else {
@@ -128,8 +222,8 @@ const SimpleDashboard: React.FC = () => {
       console.log('Fetching assignments...');
       const assignmentsResponse = await fetch('/api/assignments');
       if (assignmentsResponse.ok) {
-        const assignmentsData = await assignmentsResponse.json();
-        setAssignments(assignmentsData);
+      const assignmentsData = await assignmentsResponse.json();
+      setAssignments(assignmentsData);
         console.log('Assignments loaded:', assignmentsData.length);
       } else {
         console.error('Error fetching assignments:', assignmentsResponse.status);
@@ -149,6 +243,210 @@ const SimpleDashboard: React.FC = () => {
     setChatMessages(prev => [...prev, botMessage]);
   };
 
+  // Assignment creation workflow functions (3 steps)
+  const startAssignmentCreation = () => {
+    addBotMessage("🎯 **Let's create a new assignment!**\n\n**Step 1/3: Assignment Title**\nWhat would you like to call this assignment?");
+    setCurrentStep(1);
+  };
+
+  const handleAssignmentTitle = (title: string) => {
+    setAssignmentData(prev => ({ ...prev, title, description: title })); // Use title as description too
+    addBotMessage(`📄 **Step 2/3: Upload Assignment Question Paper**\nGreat! Now upload the assignment question paper (DOCX or PDF format) for "${title}":`);
+    setCurrentStep(2);
+    
+    // Add upload interface as a bot message
+    setTimeout(() => {
+      addBotMessage(`**Please use the file upload button below to upload your assignment question paper:**`);
+    }, 500);
+  };
+
+  const handleFileUpload = (file: File) => {
+    // Validate file type
+    const allowedTypes = ['.docx', '.pdf', '.txt'];
+    const fileExt = '.' + file.name.split('.').pop()?.toLowerCase();
+    
+    if (!allowedTypes.includes(fileExt)) {
+      addBotMessage(`❌ **Invalid file type!**\n\nPlease upload a DOCX, PDF, or TXT file. You uploaded: ${file.name}`);
+      return;
+    }
+    
+    // Validate file size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      addBotMessage(`❌ **File too large!**\n\nPlease upload a file smaller than 10MB. Your file is: ${(file.size / 1024 / 1024).toFixed(1)}MB`);
+      return;
+    }
+    
+    setAssignmentData(prev => ({ ...prev, file }));
+    addBotMessage(`📁 **File Uploaded Successfully!**\n\nFile: ${file.name} (${(file.size / 1024).toFixed(1)}KB)\n\n🤖 **Step 3/3: Generate Solution**\n\nNow I'll generate a reference solution using AI. This may take a moment...`);
+    setCurrentStep(3);
+    generateSolution(file);
+  };
+
+  const generateSolution = async (file?: File) => {
+    setIsGeneratingSolution(true);
+    try {
+      // Debug: Check if we have the required data
+      console.log('Assignment data:', assignmentData);
+      console.log('File parameter:', file);
+      console.log('File parameter type:', typeof file);
+      console.log('File parameter name:', file?.name);
+      console.log('File parameter size:', file?.size);
+      
+      if (!assignmentData.title || !assignmentData.description) {
+        addBotMessage(`❌ **Error: Missing assignment information.** Please start over and provide a title.`);
+        setIsGeneratingSolution(false);
+        return;
+      }
+
+      // Step 1: Upload file and create assignment
+      const formData = new FormData();
+      formData.append('title', assignmentData.title);
+      formData.append('description', assignmentData.description);
+      
+      // Use the file parameter if provided, otherwise use the file from state
+      const fileToUpload = file || assignmentData.file;
+      console.log('File to upload:', fileToUpload);
+      console.log('File from parameter:', file);
+      console.log('File from state:', assignmentData.file);
+      
+      if (!fileToUpload) {
+        addBotMessage(`❌ **Error: No file provided.** Please upload a file first.`);
+        setIsGeneratingSolution(false);
+        return;
+      }
+
+      formData.append('file', fileToUpload);
+      console.log('File attached to FormData:', fileToUpload.name, fileToUpload.size);
+
+      // Upload file and create assignment
+      const uploadResponse = await fetch('/api/upload-question-file', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!uploadResponse.ok) {
+        const errorData = await uploadResponse.json().catch(() => ({}));
+        throw new Error(errorData.error || `Upload failed with status ${uploadResponse.status}`);
+      }
+
+      const uploadResult = await uploadResponse.json();
+      console.log('Upload result:', uploadResult);
+      
+      // Step 2: Generate solution using the assignment ID
+      const solutionResponse = await fetch(`/api/generate-solution/${uploadResult.assignment_id}`, {
+        method: 'POST'
+      });
+
+      if (solutionResponse.ok) {
+        const result = await solutionResponse.json();
+        setAssignmentData(prev => ({ ...prev, solution: result.solution, file: fileToUpload || prev.file }));
+        
+        // Show success message with file info
+        const fileToShow = fileToUpload || assignmentData.file;
+        const fileInfo = fileToShow ? `\n\n📁 **File processed:** ${fileToShow.name}` : '';
+        const contentInfo = result.content_length ? `\n📊 **Content extracted:** ${result.content_length} characters` : '';
+        const solutionInfo = result.solution_length ? `\n🤖 **Solution generated:** ${result.solution_length} characters` : '';
+        
+        addBotMessage(`✅ **Solution Generated Successfully!**\n\nI've created a reference solution based on your assignment.${fileInfo}${contentInfo}${solutionInfo}\n\nPlease review it and let me know if you'd like any changes.`);
+        setShowSolutionModal(true);
+      } else {
+        const errorData = await solutionResponse.json().catch(() => ({}));
+        console.error('Solution generation error:', solutionResponse.status, errorData);
+        
+        let errorMessage = `❌ **Error generating solution (${solutionResponse.status}).**`;
+        if (errorData.error) {
+          errorMessage += `\n\n**Error details:** ${errorData.error}`;
+        }
+        if (errorData.message) {
+          errorMessage += `\n\n**Message:** ${errorData.message}`;
+        }
+        errorMessage += `\n\nPlease try again or contact support if the issue persists.`;
+        
+        addBotMessage(errorMessage);
+      }
+    } catch (error) {
+      console.error('Solution generation error:', error);
+      addBotMessage(`❌ **Error generating solution.** Please try again.`);
+    }
+    setIsGeneratingSolution(false);
+  };
+
+  const approveSolution = () => {
+    addBotMessage(`✅ **Solution Approved!**\n\nNow upload the ZIP file containing student submissions to start grading:`);
+    setShowSolutionModal(false);
+    setCurrentStep(4);
+    
+    // Add upload interface as a bot message
+    setTimeout(() => {
+      addBotMessage(`**Please use the file upload button below to upload student submissions:**`);
+    }, 500);
+  };
+
+  const requestSolutionChange = () => {
+    const newChangeCount = solutionChangeCount + 1;
+    setSolutionChangeCount(newChangeCount);
+    addBotMessage(`🔄 **Requesting Solution Changes** (Attempt ${newChangeCount})\n\nWhat would you like me to change in the solution?`);
+    setShowSolutionModal(false);
+  };
+
+  const handleStudentSubmissionsUpload = async (file: File) => {
+    addBotMessage(`📁 **Student Submissions Uploaded!**\n\nStarting grading process with the approved solution and student submissions...`);
+    
+    // Start grading with default rubrics and points
+    const rubrics = "Code quality, correctness, efficiency, and adherence to requirements";
+    const maxPoints = 100;
+    
+    await startGrading(rubrics, maxPoints);
+  };
+
+  const startGrading = async (rubrics: string, maxPoints: number) => {
+    setIsGrading(true);
+    setGradingProgress(0);
+    
+    try {
+      const formData = new FormData();
+      formData.append('assignment_id', 'new'); // Will be created
+      formData.append('rubric', rubrics);
+      formData.append('max_points', maxPoints.toString());
+      formData.append('title', assignmentData.title);
+      formData.append('description', assignmentData.description);
+      formData.append('solution', assignmentData.solution);
+
+      // Simulate progress updates
+      const progressInterval = setInterval(() => {
+        setGradingProgress(prev => Math.min(prev + 10, 90));
+      }, 1000);
+
+      const response = await fetch('/api/grade-assignment-new', {
+        method: 'POST',
+        body: formData
+      });
+
+      clearInterval(progressInterval);
+      setGradingProgress(100);
+
+      if (response.ok) {
+        const result = await response.json();
+        addBotMessage(`🎉 **Grading Complete!**\n\n✅ ${result.total_submissions} submissions graded\n📊 Average score: ${result.average_score}%\n\nCheck the analytics dashboard for detailed insights!`);
+        
+        // Show notification
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('Grading Complete!', {
+            body: `Graded ${result.total_submissions} submissions with average score of ${result.average_score}%`,
+            icon: '/logo192.png'
+          });
+        }
+      } else {
+        addBotMessage(`❌ **Grading failed.** Please try again.`);
+      }
+    } catch (error) {
+      addBotMessage(`❌ **Grading failed.** Please try again.`);
+    }
+    
+    setIsGrading(false);
+    setCurrentStep(0);
+  };
+
   const handleChatSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!chatInput.trim()) return;
@@ -163,9 +461,19 @@ const SimpleDashboard: React.FC = () => {
     const userInput = chatInput.toLowerCase();
     setChatInput('');
 
-    // Enhanced chatbot responses with more comprehensive support
+    // Enhanced chatbot responses with simplified 3-step workflow
     if (userInput.includes('create') || userInput.includes('new') || userInput.includes('assignment')) {
       startAssignmentCreation();
+    } else if (currentStep === 1) {
+      // Step 1: Assignment Title
+      handleAssignmentTitle(chatInput);
+    } else if (currentStep === 4) {
+      // Step 4: Upload student submissions and start grading
+      if (userInput.includes('upload') || userInput.includes('submission')) {
+        addBotMessage(`📁 **Please use the file upload button below to upload student submissions ZIP file.**`);
+      } else {
+        addBotMessage(`📁 **Please upload the student submissions ZIP file using the upload button below.**`);
+      }
     } else if (userInput.includes('help') || userInput.includes('support')) {
       addBotMessage("🤖 **I can help you with:**\n\n**📝 Assignment Management:**\n• Create new assignments\n• View assignment details\n• Edit assignment settings\n\n**📁 Submission Handling:**\n• View student submissions\n• Download files\n• Check submission status\n\n**📊 Analytics & Reports:**\n• Download CSV reports\n• View performance analytics\n• Generate grade summaries\n\n**🛠️ System Support:**\n• Navigation help\n• Feature explanations\n• Troubleshooting\n\nJust ask me what you need!");
     } else if (userInput.includes('view') || userInput.includes('submission') || userInput.includes('files')) {
@@ -213,7 +521,7 @@ const SimpleDashboard: React.FC = () => {
                 <div>
                   <h1 className="text-xl font-bold text-gray-900 dark:text-white">Grading Assistant</h1>
                   <p className="text-sm text-gray-500 dark:text-gray-400">AI-Powered</p>
-                </div>
+              </div>
               </div>
             </motion.div>
             
@@ -239,9 +547,9 @@ const SimpleDashboard: React.FC = () => {
               >
                 <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
                   <span className="text-white text-sm font-medium">
-                    {professor?.name?.charAt(0) || 'P'}
-                  </span>
-                </div>
+                  {professor?.name?.charAt(0) || 'P'}
+                </span>
+              </div>
                 <div>
                   <p className="text-sm font-medium text-gray-900 dark:text-white">{professor?.name}</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">{professor?.department}</p>
@@ -311,11 +619,11 @@ const SimpleDashboard: React.FC = () => {
                 <div className="text-center">
                   <div className="text-2xl font-bold">{stats.totalSubmissions}</div>
                   <div className="text-sm text-blue-200">Submissions</div>
-                </div>
+              </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold">{stats.averageScore}%</div>
                   <div className="text-sm text-blue-200">Avg Score</div>
-                </div>
+              </div>
               </motion.div>
             </div>
           </motion.div>
@@ -345,15 +653,15 @@ const SimpleDashboard: React.FC = () => {
                   >
                     <Bot className="w-7 h-7 text-white" />
                   </motion.div>
-                  <div>
+              <div>
                     <h3 className="text-xl font-bold text-gray-900 dark:text-white">AI Assistant</h3>
                     <p className="text-sm text-gray-500 dark:text-gray-400">Your grading companion</p>
-                  </div>
+              </div>
                 </motion.div>
               </div>
               
               <div className="p-6 flex-1 flex flex-col">
-                <div className="flex-1 overflow-y-auto mb-4 space-y-3 min-h-[150px] max-h-[200px]">
+                <div className="flex-1 overflow-y-auto mb-4 space-y-3 min-h-[200px] max-h-[300px] scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent">
                   {chatMessages.map((message, index) => (
                     <motion.div 
                       key={message.id} 
@@ -372,10 +680,73 @@ const SimpleDashboard: React.FC = () => {
                         transition={{ type: "spring", stiffness: 300 }}
                       >
                         <p className="text-sm whitespace-pre-wrap">{message.text}</p>
+                        
+                        {/* Upload buttons inside bot messages */}
+                        {!message.isUser && (
+                          <>
+                            {/* Assignment Question Paper Upload - Step 2 */}
+                            {currentStep === 2 && message.text.includes('upload your assignment question paper') && (
+                              <motion.div 
+                                className="mt-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800"
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: 0.2 }}
+                              >
+                                <div className="text-xs font-medium text-blue-800 dark:text-blue-200 mb-2 flex items-center">
+                                  <span className="mr-1">📄</span>
+                                  Upload Assignment Question Paper
+                                </div>
+                                <input
+                                  type="file"
+                                  accept=".docx,.pdf,.txt"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                      handleFileUpload(file);
+                                    }
+                                  }}
+                                  className="w-full p-2 border border-blue-300 dark:border-blue-600 rounded-lg bg-white dark:bg-gray-800 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                                />
+                                <div className="text-xs text-blue-600 dark:text-blue-300 mt-1">
+                                  Upload DOCX, PDF, or TXT file containing assignment questions (max 10MB)
+                                </div>
+                              </motion.div>
+                            )}
+
+                            {/* Student Submissions Upload - Step 4 */}
+                            {currentStep === 4 && message.text.includes('upload student submissions') && (
+                              <motion.div 
+                                className="mt-3 p-2 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800"
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: 0.2 }}
+                              >
+                                <div className="text-xs font-medium text-green-800 dark:text-green-200 mb-2 flex items-center">
+                                  <span className="mr-1">📁</span>
+                                  Upload Student Submissions
+                                </div>
+                                <input
+                                  type="file"
+                                  accept=".zip"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                      handleStudentSubmissionsUpload(file);
+                                    }
+                                  }}
+                                  className="w-full p-2 border border-green-300 dark:border-green-600 rounded-lg bg-white dark:bg-gray-800 text-xs focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200"
+                                />
+                                <div className="text-xs text-green-600 dark:text-green-300 mt-1">
+                                  Upload ZIP file containing student submissions
+            </div>
+                              </motion.div>
+                            )}
+                          </>
+                        )}
                       </motion.div>
                     </motion.div>
                   ))}
-                </div>
+          </div>
 
                 <motion.div 
                   className="relative z-10 mt-auto"
@@ -385,27 +756,147 @@ const SimpleDashboard: React.FC = () => {
                 >
                   <form 
                     onSubmit={handleChatSubmit} 
-                    className="flex space-x-3 bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-2xl p-3 border border-gray-200/50 dark:border-gray-600/50"
+                    className="flex space-x-3 bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg rounded-2xl p-4 border border-gray-200/50 dark:border-gray-600/50 shadow-lg"
                   >
-                    <input
-                      type="text"
-                      value={chatInput}
-                      onChange={(e) => setChatInput(e.target.value)}
-                      placeholder="Ask me about grading..."
-                      className="flex-1 px-4 py-2 bg-transparent border-none focus:outline-none text-sm text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
-                    />
+                    <div className="flex-1 relative">
+                      <input
+                        type="text"
+                        value={chatInput}
+                        onChange={(e) => setChatInput(e.target.value)}
+                        onFocus={(e) => e.target.placeholder = "Ask me about grading, assignments, or analytics..."}
+                        onBlur={(e) => e.target.placeholder = "Ask me about grading..."}
+                        placeholder="Ask me about grading..."
+                        className="w-full px-4 py-3 bg-transparent border-none focus:outline-none text-sm text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 transition-all duration-200"
+                        style={{ 
+                          boxShadow: chatInput ? '0 0 0 2px rgba(59, 130, 246, 0.2)' : 'none'
+                        }}
+                      />
+                      {chatInput && (
+                        <motion.div
+                          className="absolute right-3 top-1/2 transform -translate-y-1/2"
+                          initial={{ opacity: 0, scale: 0.8 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.8 }}
+                        >
+                          <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                        </motion.div>
+                      )}
+                    </div>
                     <motion.button
                       type="submit"
-                      className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-4 py-2 rounded-xl text-sm font-medium shadow-lg transition-all duration-200"
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
+                      disabled={!chatInput.trim()}
+                      className={`px-6 py-3 rounded-xl text-sm font-medium transition-all duration-200 flex items-center space-x-2 ${
+                        chatInput.trim() 
+                          ? 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-lg hover:shadow-xl' 
+                          : 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+                      }`}
+                      whileHover={chatInput.trim() ? { scale: 1.05 } : {}}
+                      whileTap={chatInput.trim() ? { scale: 0.95 } : {}}
                       transition={{ type: "spring", stiffness: 300 }}
                     >
-                      Send
+                      <span>Send</span>
+                      <motion.div
+                        animate={{ rotate: chatInput.trim() ? 0 : 0 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                        </svg>
+                      </motion.div>
                     </motion.button>
                   </form>
+                  
+                  {/* Typing indicator */}
+                  {chatInput && (
+                    <motion.div 
+                      className="mt-2 text-xs text-gray-500 dark:text-gray-400 flex items-center space-x-2"
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.1 }}
+                    >
+                      <div className="flex space-x-1">
+                        <div className="w-1 h-1 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                        <div className="w-1 h-1 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                        <div className="w-1 h-1 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                      </div>
+                      <span>Ready to send...</span>
+                    </motion.div>
+                  )}
                 </motion.div>
                 
+                
+                {/* Workflow Progress Indicators */}
+                {currentStep > 0 && (
+                  <motion.div 
+                    className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2 }}
+                  >
+                    <div className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-2">
+                      Assignment Creation Progress
+                    </div>
+                    <div className="flex space-x-2">
+                      {[1, 2, 3].map((step) => (
+                        <div
+                          key={step}
+                          className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
+                            step <= currentStep
+                              ? 'bg-blue-500 text-white'
+                              : 'bg-gray-200 dark:bg-gray-700 text-gray-500'
+                          }`}
+                        >
+                          {step}
+                        </div>
+                      ))}
+              </div>
+                    <div className="text-xs text-blue-600 dark:text-blue-300 mt-1">
+                      Step {currentStep} of 3
+              </div>
+                  </motion.div>
+                )}
+
+                {/* Solution Generation Progress */}
+                {isGeneratingSolution && (
+                  <motion.div 
+                    className="mt-4 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2 }}
+                  >
+                    <div className="flex items-center space-x-2">
+                      <div className="animate-spin w-4 h-4 border-2 border-green-500 border-t-transparent rounded-full"></div>
+                      <span className="text-sm text-green-700 dark:text-green-300">
+                        🤖 AI is generating the solution...
+                      </span>
+              </div>
+                  </motion.div>
+                )}
+
+
+                {/* Grading Progress */}
+                {isGrading && (
+                  <motion.div 
+                    className="mt-4 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2 }}
+                  >
+                    <div className="text-sm font-medium text-purple-800 dark:text-purple-200 mb-2">
+                      🎯 Grading in Progress...
+              </div>
+                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                      <div 
+                        className="bg-purple-500 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${gradingProgress}%` }}
+                      ></div>
+            </div>
+                    <div className="text-xs text-purple-600 dark:text-purple-300 mt-1">
+                      {gradingProgress}% Complete
+          </div>
+                  </motion.div>
+                )}
+
                 <motion.div 
                   className="mt-4 text-xs text-gray-500 dark:text-gray-400"
                   initial={{ opacity: 0 }}
@@ -415,7 +906,7 @@ const SimpleDashboard: React.FC = () => {
                   <div className="flex items-center space-x-2">
                     <span>💡</span>
                     <span>Try: 'create assignment', 'help', or ask about submissions</span>
-                  </div>
+              </div>
                 </motion.div>
               </div>
             </div>
@@ -449,60 +940,14 @@ const SimpleDashboard: React.FC = () => {
               </div>
               
               <div className="p-6">
-                {assignments.length > 0 ? (
+                {memoizedAssignments.length > 0 ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {assignments.map((assignment, index) => (
-                      <motion.div 
-                        key={assignment.id} 
-                        className="bg-gradient-to-br from-white to-blue-50/30 dark:from-gray-700 dark:to-gray-600/30 rounded-2xl border border-gray-200/50 dark:border-gray-600/50 p-6 hover:shadow-xl transition-all duration-300 cursor-pointer group"
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 1.2 + index * 0.1, duration: 0.4 }}
-                        whileHover={{ 
-                          scale: 1.02, 
-                          boxShadow: "0 10px 25px rgba(0,0,0,0.1)" 
-                        }}
-                      >
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="flex-1">
-                            <div className="flex items-center space-x-3 mb-3">
-                              <div className="bg-blue-100 dark:bg-blue-900/20 p-2 rounded-lg group-hover:bg-blue-200 dark:group-hover:bg-blue-800/30 transition-colors">
-                                <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                              </div>
-                              <h4 className="text-lg font-semibold text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                                {assignment.title}
-                              </h4>
-                            </div>
-                            
-                            <p className="text-gray-600 dark:text-gray-300 text-sm mb-4 line-clamp-2">
-                              {assignment.description}
-                            </p>
-                            
-                            <div className="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400">
-                              <div className="flex items-center space-x-1">
-                                <Calendar className="w-4 h-4" />
-                                <span>Due: {new Date(assignment.due_date).toLocaleDateString()}</span>
-                              </div>
-                              <div className="flex items-center space-x-1">
-                                <Target className="w-4 h-4" />
-                                <span>{assignment.max_points} pts</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                        
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-2">
-                            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                            <span className="text-sm text-gray-600 dark:text-gray-400">Active</span>
-                          </div>
-                          
-                          <div className="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
-                            <Users className="w-4 h-4" />
-                            <span>{Math.floor(Math.random() * 20) + 5} submissions</span>
-                          </div>
-                        </div>
-                      </motion.div>
+                    {memoizedAssignments.map((assignment, index) => (
+                      <AssignmentCard 
+                        key={assignment.id}
+                        assignment={assignment}
+                        index={index}
+                      />
                     ))}
                   </div>
                 ) : (
@@ -514,7 +959,7 @@ const SimpleDashboard: React.FC = () => {
                   >
                     <div className="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
                       <FileText className="w-8 h-8 text-gray-400" />
-                    </div>
+                  </div>
                     <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No assignments yet</h3>
                     <p className="text-gray-500 dark:text-gray-400 mb-6">Create your first assignment using the AI assistant</p>
                     <motion.button
@@ -533,8 +978,63 @@ const SimpleDashboard: React.FC = () => {
               </div>
             </div>
           </motion.div>
-        </div>
-      </div>
+            </div>
+          </div>
+
+      {/* Solution Review Modal */}
+      {showSolutionModal && (
+        <motion.div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+        >
+          <motion.div
+            className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[80vh] overflow-hidden"
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+          >
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white">
+                🤖 AI Generated Solution
+                </h3>
+              <p className="text-gray-600 dark:text-gray-400 mt-1">
+                Review the solution and approve or request changes
+              </p>
+              </div>
+            
+            <div className="p-6 max-h-96 overflow-y-auto">
+              <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4">
+                <pre className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">
+                  {assignmentData.solution}
+                </pre>
+              </div>
+            </div>
+            
+            <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex space-x-3">
+              <button
+                onClick={approveSolution}
+                className="flex-1 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+              >
+                ✅ Approve Solution
+              </button>
+              <button
+                onClick={requestSolutionChange}
+                className="flex-1 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+              >
+                🔄 Request Changes
+              </button>
+              <button
+                onClick={() => setShowSolutionModal(false)}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                Cancel
+              </button>
+          </div>
+          </motion.div>
+        </motion.div>
+      )}
     </div>
   );
 };
