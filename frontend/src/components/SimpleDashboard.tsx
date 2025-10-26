@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { 
   FileText, 
@@ -138,6 +138,7 @@ const SimpleDashboard: React.FC = () => {
   const [showSolutionModal, setShowSolutionModal] = useState(false);
   const [solutionChangeCount, setSolutionChangeCount] = useState(0);
   const [isStateSaved, setIsStateSaved] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null); // Ref for auto-scrolling
 
   // State persistence functions
   const saveChatbotState = () => {
@@ -201,6 +202,24 @@ const SimpleDashboard: React.FC = () => {
       assignmentId: null
     });
     setSolutionChangeCount(0);
+    
+    // Scroll to top when chat is cleared
+    setTimeout(() => {
+      const chatContainer = document.querySelector('.overflow-y-auto');
+      if (chatContainer) {
+        chatContainer.scrollTop = 0;
+      }
+    }, 100);
+  };
+
+  // Auto-scroll to bottom of chat
+  const scrollToBottom = () => {
+    if (messagesEndRef.current) {
+      console.log('🔍 DEBUG: Scrolling to bottom, ref found:', messagesEndRef.current);
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    } else {
+      console.log('❌ DEBUG: messagesEndRef.current is null');
+    }
   };
 
   // Stats calculation
@@ -251,6 +270,8 @@ const SimpleDashboard: React.FC = () => {
       console.log('✅ Chatbot state restored from localStorage');
       // Add a notification message about state restoration
       addBotMessage(`🔄 **Welcome back!**\n\nI've restored your previous conversation and assignment progress. You can continue where you left off or start fresh by clicking the "Clear" button.`);
+      // Scroll to bottom after state is restored
+      setTimeout(scrollToBottom, 100);
     }
   }, []);
 
@@ -261,6 +282,11 @@ const SimpleDashboard: React.FC = () => {
       saveChatbotState();
     }
   }, [chatMessages, currentStep, assignmentData, solutionChangeCount]);
+
+  // Auto-scroll to bottom when new messages are added
+  useEffect(() => {
+    scrollToBottom();
+  }, [chatMessages]);
 
   const fetchDashboardData = async (professorId?: string | null) => {
     try {
@@ -917,7 +943,9 @@ const SimpleDashboard: React.FC = () => {
                       </motion.div>
                     </motion.div>
                   ))}
-          </div>
+                  {/* Auto-scroll anchor - positioned right after the last message */}
+                  <div ref={messagesEndRef} />
+                </div>
 
                 <motion.div 
                   className="relative z-10 mt-auto"
