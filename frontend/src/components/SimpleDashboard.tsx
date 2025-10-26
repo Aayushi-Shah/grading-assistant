@@ -167,7 +167,7 @@ const AssignmentCard = React.memo(({ assignment, index, onViewGrades, onDownload
                 e.stopPropagation();
                 onViewGrades(assignment);
               }}
-              className="flex-1 bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 text-white px-4 py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center space-x-2 transition-all duration-300 shadow-md hover:shadow-lg"
+              className="flex-1 bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 text-white px-3 py-2 rounded-md text-sm font-semibold flex items-center justify-center space-x-2 transition-all duration-300 shadow-md hover:shadow-lg"
             >
               <Eye className="w-4 h-4" />
               <span>View Grades</span>
@@ -180,7 +180,7 @@ const AssignmentCard = React.memo(({ assignment, index, onViewGrades, onDownload
                 e.stopPropagation();
                 onDownloadCSV(assignment);
               }}
-              className="flex-1 bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white px-4 py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center space-x-2 transition-all duration-300 shadow-md hover:shadow-lg"
+              className="flex-1 bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white px-3 py-2 rounded-md text-sm font-semibold flex items-center justify-center space-x-2 transition-all duration-300 shadow-md hover:shadow-lg"
             >
               <Download className="w-4 h-4" />
               <span>Download CSV</span>
@@ -413,7 +413,7 @@ const SimpleDashboard: React.FC = () => {
         
         // Refresh class average and assignment averages
         fetchClassAverage();
-        fetchAssignmentAverages();
+        fetchAssignmentAverages(assignments.filter(a => a.id !== assignmentToDelete.id));
         
         // Show success message
         addBotMessage(`🗑️ **Assignment Deleted Successfully!**\n\nAssignment "${assignmentToDelete.title}" has been permanently deleted along with all its grades and submissions.`);
@@ -568,11 +568,11 @@ const SimpleDashboard: React.FC = () => {
   }, []);
 
   // Fetch assignment averages for each assignment
-  const fetchAssignmentAverages = useCallback(async () => {
-    if (assignments.length === 0) return;
+  const fetchAssignmentAverages = useCallback(async (currentAssignments: Assignment[]) => {
+    if (currentAssignments.length === 0) return;
     
     try {
-      const promises = assignments.map(async (assignment) => {
+      const promises = currentAssignments.map(async (assignment) => {
         try {
           const response = await fetch(`http://localhost:5002/api/assignments/${assignment.id}/average`);
           if (response.ok) {
@@ -586,11 +586,19 @@ const SimpleDashboard: React.FC = () => {
       });
       
       const updatedAssignments = await Promise.all(promises);
-      setAssignments(updatedAssignments);
+      
+      // Only update state if there are actual changes to prevent infinite loops
+      const hasChanges = updatedAssignments.some((updated, index) => 
+        updated.average_score !== currentAssignments[index]?.average_score
+      );
+      
+      if (hasChanges) {
+        setAssignments(updatedAssignments);
+      }
     } catch (error) {
       console.error('Error fetching assignment averages:', error);
     }
-  }, [assignments.length]);
+  }, []);
 
   // Fetch class average when component mounts or assignments change
   useEffect(() => {
@@ -614,9 +622,9 @@ const SimpleDashboard: React.FC = () => {
   // Fetch assignment averages when assignments change
   useEffect(() => {
     if (assignments.length > 0) {
-      fetchAssignmentAverages();
+      fetchAssignmentAverages(assignments);
     }
-  }, [assignments.length]); // Only run when assignments count changes, not on every assignment update
+  }, [assignments.length, fetchAssignmentAverages]); // Only run when assignments count changes
 
   const toggleTheme = () => {
     const newTheme = !isDarkMode;
@@ -878,9 +886,9 @@ const SimpleDashboard: React.FC = () => {
     
     // Refresh assignments list to show the new assignment
     try {
-      await fetchAssignmentsSorted();
+      const updatedAssignments = await fetchAssignmentsSorted();
       fetchClassAverage();
-      fetchAssignmentAverages();
+      fetchAssignmentAverages(updatedAssignments);
     } catch (error) {
       console.error('Error refreshing assignments:', error);
     }
@@ -944,43 +952,49 @@ const SimpleDashboard: React.FC = () => {
     try {
       addBotMessage(`📁 **Student Submissions Uploaded Successfully!**\n\nFile: ${file.name} (${(file.size / 1024).toFixed(1)}KB)\n\n**Step 7/7: Complete Process**\n\nStarting the grading process...`);
       
-      // Create assignment first
-      const assignmentResponse = await fetch('http://localhost:5002/api/upload-question-file', {
-        method: 'POST',
-        body: (() => {
-          const formData = new FormData();
-          formData.append('title', workflowData.assignmentName);
-          formData.append('description', workflowData.assignmentName);
-          formData.append('max_points', workflowData.maxPoints.toString());
-          formData.append('professor_id', professor?.id.toString() || '1');
-          formData.append('subject_id', selectedSubject?.id.toString() || '1');
-          if (workflowData.questionFile) {
-            formData.append('file', workflowData.questionFile);
-          }
-          return formData;
-        })()
-      });
-
-      if (!assignmentResponse.ok) {
-        throw new Error(`Assignment creation failed: ${assignmentResponse.status}`);
-      }
-
-      const assignmentResult = await assignmentResponse.json();
-      const assignmentId = assignmentResult.assignment_id;
+      // Use existing assignment ID if available, otherwise create new assignment
+      let assignmentId = workflowData.assignmentId;
       
-      setWorkflowData(prev => ({ ...prev, assignmentId }));
-      
-      // Generate solution
-      const solutionResponse = await fetch(`http://localhost:5002/api/generate-solution/${assignmentId}`, {
-        method: 'POST'
-      });
+      if (!assignmentId) {
+        // Create assignment first (only if not already created)
+        const assignmentResponse = await fetch('http://localhost:5002/api/upload-question-file', {
+          method: 'POST',
+          body: (() => {
+            const formData = new FormData();
+            formData.append('title', workflowData.assignmentName);
+            formData.append('description', workflowData.assignmentName);
+            formData.append('max_points', workflowData.maxPoints.toString());
+            formData.append('professor_id', professor?.id.toString() || '1');
+            formData.append('subject_id', selectedSubject?.id.toString() || '1');
+            if (workflowData.questionFile) {
+              formData.append('file', workflowData.questionFile);
+            }
+            return formData;
+          })()
+        });
 
-      if (!solutionResponse.ok) {
-        throw new Error(`Solution generation failed: ${solutionResponse.status}`);
+        if (!assignmentResponse.ok) {
+          throw new Error(`Assignment creation failed: ${assignmentResponse.status}`);
+        }
+
+        const assignmentResult = await assignmentResponse.json();
+        assignmentId = assignmentResult.assignment_id;
+        setWorkflowData(prev => ({ ...prev, assignmentId }));
       }
+      
+      // Generate solution if not already generated
+      if (!workflowData.solution) {
+        const solutionResponse = await fetch(`http://localhost:5002/api/generate-solution/${assignmentId}`, {
+          method: 'POST'
+        });
 
-      const solutionResult = await solutionResponse.json();
-      setWorkflowData(prev => ({ ...prev, solution: solutionResult.solution }));
+        if (!solutionResponse.ok) {
+          throw new Error(`Solution generation failed: ${solutionResponse.status}`);
+        }
+
+        const solutionResult = await solutionResponse.json();
+        setWorkflowData(prev => ({ ...prev, solution: solutionResult.solution }));
+      }
       
       // Upload student submissions and start grading
       const uploadResponse = await fetch(`http://localhost:5002/api/assignments/${assignmentId}/upload`, {
@@ -1002,9 +1016,9 @@ const SimpleDashboard: React.FC = () => {
       addBotMessage(`🎉 **Assignment Creation Complete!**\n\nYour assignment has been successfully created and graded.\n\n**Summary:**\n• Assignment: ${workflowData.assignmentName}\n• Students Graded: Completed\n• Status: Ready for review\n\n**Next Steps:**\n• View grades in the assignment card\n• Download CSV reports\n• Review individual submissions\n\nType 'create' to start a new assignment workflow!`);
       
       // Refresh assignments list
-      await fetchAssignmentsSorted();
+      const updatedAssignments = await fetchAssignmentsSorted();
       fetchClassAverage();
-      fetchAssignmentAverages();
+      fetchAssignmentAverages(updatedAssignments);
       
     } catch (error) {
       console.error('Error in student submissions upload:', error);
@@ -1292,9 +1306,9 @@ const SimpleDashboard: React.FC = () => {
         }
               
               // Refresh assignments list, class average and assignment averages after grading completion
-              await fetchAssignmentsSorted();
+              const updatedAssignments = await fetchAssignmentsSorted();
               fetchClassAverage();
-              fetchAssignmentAverages();
+              fetchAssignmentAverages(updatedAssignments);
               
               setIsGrading(false);
               setCurrentStep(0);
@@ -1614,7 +1628,7 @@ const SimpleDashboard: React.FC = () => {
               {/* Header */}
               <div className="relative p-6 border-b border-white/20 dark:border-gray-700/30 z-10">
                 <motion.div 
-                  className="flex items-center"
+                  className="flex items-center justify-between"
                   initial={{ opacity: 0, y: -20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.8, duration: 0.6 }}
@@ -1636,22 +1650,24 @@ const SimpleDashboard: React.FC = () => {
                       AI Assistant
                     </h3>
                     <p className="text-sm font-medium text-blue-600 dark:text-blue-400">Your intelligent grading companion</p>
-                    {workflowStep !== 'name' && (
-                      <motion.div 
-                        className="mt-2 inline-flex items-center px-3 py-1 bg-gradient-to-r from-blue-100 to-purple-100 dark:from-blue-900/30 dark:to-purple-900/30 rounded-full text-xs font-semibold text-blue-700 dark:text-blue-300"
-                        initial={{ opacity: 0, scale: 0.8 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ delay: 1.0 }}
-                      >
-                        <div className="w-2 h-2 bg-blue-500 rounded-full mr-2 animate-pulse"></div>
-                        {workflowStep === 'question' ? 'Step 2/7: Question Upload' :
-                         workflowStep === 'solution' ? 'Step 3/7: Solution Generation' :
-                         workflowStep === 'rubrics' ? 'Step 4/7: Rubrics & Points' :
-                         workflowStep === 'upload' ? 'Step 6/7: Submissions Upload' :
-                         workflowStep === 'complete' ? 'Step 7/7: Complete' : 'Active'}
-                      </motion.div>
-                    )}
-              </div>
+                  </div>
+                  
+                  {/* Clear Chat Cross Icon */}
+                  {chatMessages.length > 0 && (
+                    <motion.button
+                      type="button"
+                      onClick={clearChatbotState}
+                      className="w-8 h-8 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-md hover:shadow-lg transition-all duration-200"
+                      whileHover={{ scale: 1.1 }}
+                      whileTap={{ scale: 0.9 }}
+                      title="Clear chat and start over"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </motion.button>
+                  )}
+                  
                 </motion.div>
               </div>
               
@@ -1764,20 +1780,40 @@ const SimpleDashboard: React.FC = () => {
                                   <span className="mr-1">📁</span>
                                   Upload Student Submissions
                                 </div>
-                                <input
-                                  type="file"
-                                  accept=".zip"
-                                  onChange={(e) => {
-                                    const file = e.target.files?.[0];
-                                    if (file) {
-                                      handleStudentSubmissionsUpload(file);
-                                    }
-                                  }}
-                                  className="w-full p-2 border border-green-300 dark:border-green-600 rounded-lg bg-white dark:bg-gray-800 text-xs focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200"
-                                />
-                                <div className="text-xs text-green-600 dark:text-green-300 mt-1">
-                                  Upload ZIP file containing student submissions
-            </div>
+                                
+                                {isUploading ? (
+                                  <div className="w-full p-4 border border-green-300 dark:border-green-600 rounded-lg bg-white dark:bg-gray-800 text-center">
+                                    <div className="flex flex-col items-center space-y-3">
+                                      <div className="animate-spin rounded-full h-8 w-8 border-2 border-green-500 border-t-transparent"></div>
+                                      <div className="text-sm text-green-600 dark:text-green-300">
+                                        Processing submissions... {uploadProgress}%
+                                      </div>
+                                      <div className="w-full bg-green-100 dark:bg-green-900/30 rounded-full h-2">
+                                        <div 
+                                          className="bg-green-500 h-2 rounded-full transition-all duration-300"
+                                          style={{ width: `${uploadProgress}%` }}
+                                        ></div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <input
+                                      type="file"
+                                      accept=".zip"
+                                      onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        if (file) {
+                                          handleStudentSubmissionsUpload(file);
+                                        }
+                                      }}
+                                      className="w-full p-2 border border-green-300 dark:border-green-600 rounded-lg bg-white dark:bg-gray-800 text-xs focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200"
+                                    />
+                                    <div className="text-xs text-green-600 dark:text-green-300 mt-1">
+                                      Upload ZIP file containing student submissions
+                                    </div>
+                                  </>
+                                )}
                               </motion.div>
                             )}
                           </>
@@ -1870,34 +1906,31 @@ const SimpleDashboard: React.FC = () => {
                   transition={{ delay: 1.2, duration: 0.6 }}
                 >
                   <>
-                  <form 
-                    onSubmit={handleChatSubmit} 
-                      className="relative flex space-x-3 bg-white/95 dark:bg-slate-800/95 backdrop-blur-2xl rounded-2xl p-4 border border-slate-200/40 dark:border-slate-700/50 shadow-xl"
-                  >
-                    {/* Input Background Glow */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-indigo-50/60 to-blue-50/60 dark:from-indigo-900/20 dark:to-blue-900/20 rounded-2xl"></div>
-                    
+                    <form 
+                      onSubmit={handleChatSubmit} 
+                        className="relative flex space-x-2 bg-white dark:bg-slate-800 rounded-lg p-2 shadow-lg border border-gray-200 dark:border-gray-600"
+                    >
                     <div className="flex-1 relative">
                       <input
                         type="text"
                         value={chatInput}
                         onChange={(e) => setChatInput(e.target.value)}
-                        onFocus={(e) => e.target.placeholder = "Ask me about grading, assignments, or analytics..."}
+                        onFocus={(e) => e.target.placeholder = "Ask me about grading..."}
                         onBlur={(e) => e.target.placeholder = "Ask me about grading..."}
                         placeholder="Ask me about grading..."
-                        className="w-full px-5 py-4 bg-transparent border-none focus:outline-none text-base text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 transition-all duration-300 font-medium"
+                        className="w-full px-3 py-2 bg-transparent border-none focus:outline-none text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-all duration-200"
                         style={{ 
-                          boxShadow: chatInput ? '0 0 0 3px rgba(59, 130, 246, 0.3)' : 'none'
+                          boxShadow: chatInput ? '0 0 0 2px rgba(59, 130, 246, 0.2)' : 'none'
                         }}
                       />
                       {chatInput && (
                         <motion.div
-                          className="absolute right-4 top-1/2 transform -translate-y-1/2"
+                          className="absolute right-3 top-1/2 transform -translate-y-1/2"
                           initial={{ opacity: 0, scale: 0.8 }}
                           animate={{ opacity: 1, scale: 1 }}
                           exit={{ opacity: 0, scale: 0.8 }}
                         >
-                          <div className="w-3 h-3 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full animate-pulse shadow-lg"></div>
+                          <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse shadow-sm"></div>
                         </motion.div>
                       )}
                     </div>
@@ -1905,10 +1938,10 @@ const SimpleDashboard: React.FC = () => {
                     <motion.button
                       type="submit"
                       disabled={!chatInput.trim()}
-                      className={`relative px-5 py-3 rounded-xl text-sm font-semibold transition-all duration-300 flex items-center space-x-2 ${
+                      className={`relative px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 flex items-center space-x-1 ${
                         chatInput.trim() 
-                          ? 'bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 text-white shadow-lg hover:shadow-xl' 
-                          : 'bg-slate-300 dark:bg-slate-600 text-slate-500 dark:text-slate-400 cursor-not-allowed'
+                          ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg' 
+                          : 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
                       }`}
                       whileHover={chatInput.trim() ? { 
                         scale: 1.02, 
@@ -1918,28 +1951,10 @@ const SimpleDashboard: React.FC = () => {
                       transition={{ type: "spring", stiffness: 300 }}
                     >
                       <span>Send</span>
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                         </svg>
                     </motion.button>
-                    
-                    {/* Clear Chat Button */}
-                    {chatMessages.length > 0 && (
-                      <motion.button
-                        type="button"
-                        onClick={clearChatbotState}
-                        className="px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 flex items-center space-x-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300"
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        transition={{ type: "spring", stiffness: 300 }}
-                        title="Clear chat and start over"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                        <span>Clear</span>
-                      </motion.button>
-                    )}
                   </form>
                   
                   {/* Typing indicator */}
@@ -2099,18 +2114,40 @@ const SimpleDashboard: React.FC = () => {
                   </motion.div>
                 )}
 
+                {/* Only show help text when chat is empty */}
+                {chatMessages.length === 0 && (
+                  <motion.div 
+                    className="mt-4 text-xs text-gray-500 dark:text-gray-400"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 1.4, duration: 0.4 }}
+                  >
+                    <div className="flex items-center space-x-2">
+                      <span>💡</span>
+                      <span>Try: 'create assignment', 'help', or ask about submissions</span>
+                    </div>
+                  </motion.div>
+                )}
+              </div>
+
+              {/* Workflow Step Indicator - Moved outside scrollable area */}
+              {workflowStep !== 'name' && (
                 <motion.div 
-                  className="mt-4 text-xs text-gray-500 dark:text-gray-400"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 1.4, duration: 0.4 }}
+                  className="px-6 pb-6 pt-2 flex justify-center"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.5 }}
                 >
-                  <div className="flex items-center space-x-2">
-                    <span>💡</span>
-                    <span>Try: 'create assignment', 'help', or ask about submissions</span>
-              </div>
+                  <div className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-100 to-purple-100 dark:from-blue-900/30 dark:to-purple-900/30 rounded-full text-sm font-semibold text-blue-700 dark:text-blue-300 shadow-sm border border-blue-200 dark:border-blue-700">
+                    <div className="w-2 h-2 bg-blue-500 rounded-full mr-2 animate-pulse"></div>
+                    {workflowStep === 'question' ? 'Step 2/7: Question Upload' :
+                     workflowStep === 'solution' ? 'Step 3/7: Solution Generation' :
+                     workflowStep === 'rubrics' ? 'Step 4/7: Rubrics & Points' :
+                     workflowStep === 'upload' ? 'Step 6/7: Submissions Upload' :
+                     workflowStep === 'complete' ? 'Step 7/7: Complete' : 'Active'}
+                  </div>
                 </motion.div>
-              </div>
+              )}
             </div>
           </motion.div>
 
@@ -2174,7 +2211,7 @@ const SimpleDashboard: React.FC = () => {
                         setChatInput("create assignment");
                         handleChatSubmit({ preventDefault: () => {} } as React.FormEvent);
                       }}
-                      className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-medium transition-colors duration-200"
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md font-medium transition-colors duration-200"
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
                     >
@@ -2222,19 +2259,19 @@ const SimpleDashboard: React.FC = () => {
             <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex space-x-3">
               <button
                 onClick={approveSolution}
-                className="flex-1 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                className="flex-1 bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 rounded-md font-medium transition-colors"
               >
                 ✅ Accept
               </button>
               <button
                 onClick={requestSolutionChange}
-                className="flex-1 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                className="flex-1 bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-md font-medium transition-colors"
               >
                 🔄 Reject & Regenerate
               </button>
               <button
                 onClick={() => setShowSolutionModal(false)}
-                className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
                 Cancel
               </button>
@@ -2366,7 +2403,7 @@ const SimpleDashboard: React.FC = () => {
             <div className="bg-gray-50 dark:bg-gray-700/50 px-6 py-4 flex justify-end space-x-3">
               <button
                 onClick={() => setShowGradesModal(false)}
-                className="px-4 py-2 text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-white transition-colors"
+                className="px-3 py-1.5 text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-white transition-colors"
               >
                 Close
               </button>
@@ -2375,7 +2412,7 @@ const SimpleDashboard: React.FC = () => {
                   handleDownloadCSV(selectedAssignment);
                   setShowGradesModal(false);
                 }}
-                className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors flex items-center space-x-2"
+                className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded-md transition-colors flex items-center space-x-2"
               >
                 <Download className="w-4 h-4" />
                 <span>Download CSV</span>
@@ -2436,7 +2473,7 @@ const SimpleDashboard: React.FC = () => {
               <div className="flex space-x-3">
                 <button
                   onClick={() => setShowDeleteModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                  className="flex-1 px-3 py-1.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                   disabled={isDeleting}
                 >
                   Cancel
@@ -2444,7 +2481,7 @@ const SimpleDashboard: React.FC = () => {
                 <button
                   onClick={confirmDeleteAssignment}
                   disabled={isDeleting}
-                  className="flex-1 bg-red-500 hover:bg-red-600 disabled:bg-red-300 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center justify-center space-x-2"
+                  className="flex-1 bg-red-500 hover:bg-red-600 disabled:bg-red-300 text-white px-3 py-1.5 rounded-md font-medium transition-colors flex items-center justify-center space-x-2"
                 >
                   {isDeleting ? (
                     <>

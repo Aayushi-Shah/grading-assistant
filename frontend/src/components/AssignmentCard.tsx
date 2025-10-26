@@ -96,7 +96,7 @@ const AssignmentCard: React.FC<AssignmentCardProps> = ({ assignment }) => {
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-lg text-xs font-medium flex items-center space-x-1 transition-colors"
+                className="bg-green-500 hover:bg-green-600 text-white px-2 py-1 rounded-md text-xs font-medium flex items-center space-x-1 transition-colors"
               >
                 <FileArchive className="w-3 h-3" />
                 <span>View Files</span>
@@ -105,7 +105,7 @@ const AssignmentCard: React.FC<AssignmentCardProps> = ({ assignment }) => {
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-lg text-xs font-medium flex items-center space-x-1 transition-colors"
+                className="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded-md text-xs font-medium flex items-center space-x-1 transition-colors"
               >
                 <Download className="w-3 h-3" />
                 <span>Download CSV</span>

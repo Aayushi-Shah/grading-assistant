@@ -252,7 +252,7 @@ const Chatbot: React.FC<ChatbotProps> = () => {
           whileTap={{ scale: 0.95 }}
           onClick={handleSendMessage}
           disabled={!inputMessage.trim() || isProcessing}
-          className="bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 text-white p-2 rounded-lg transition-colors"
+          className="bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 text-white p-1.5 rounded-md transition-colors"
         >
           {isProcessing ? (
             <Loader2 className="w-4 h-4 animate-spin" />
