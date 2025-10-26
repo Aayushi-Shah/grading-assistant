@@ -778,6 +778,7 @@ const SimpleDashboard: React.FC = () => {
   const handleAssignmentName = (name: string) => {
     setWorkflowData(prev => ({ ...prev, assignmentName: name }));
     setWorkflowStep('question');
+    console.log('🔍 DEBUG: Assignment name set, workflow step changed to question');
     addBotMessage(`✅ **Assignment Name Set:** "${name}"\n\n**Step 2/6: Question File Upload**\nPlease upload the assignment question file (DOCX, PDF, or TXT).\n\nClick the "Choose File" button below to upload your question file.`);
   };
 
@@ -868,6 +869,7 @@ const SimpleDashboard: React.FC = () => {
       }
       
       setWorkflowData(prev => ({ ...prev, maxPoints }));
+      console.log('🔍 DEBUG: Updated workflow data with maxPoints:', { ...workflowData, maxPoints });
       setWorkflowStep('upload');
       addBotMessage(`✅ **Maximum Points Set:** ${maxPoints}\n\n**Step 6/7: Student Submissions Upload**\nNow please upload the ZIP file containing student submissions.\n\nClick the "Choose File" button below to upload the submissions ZIP file.`);
     }
@@ -952,34 +954,13 @@ const SimpleDashboard: React.FC = () => {
     try {
       addBotMessage(`📁 **Student Submissions Uploaded Successfully!**\n\nFile: ${file.name} (${(file.size / 1024).toFixed(1)}KB)\n\n**Step 7/7: Complete Process**\n\nStarting the grading process...`);
       
-      // Use existing assignment ID if available, otherwise create new assignment
-      let assignmentId = workflowData.assignmentId;
+      // Use existing assignment ID - this should always be available at this point
+      const assignmentId = workflowData.assignmentId;
+      console.log('🔍 DEBUG: Using assignment ID for submissions upload:', assignmentId);
+      console.log('🔍 DEBUG: Current workflow data:', workflowData);
       
       if (!assignmentId) {
-        // Create assignment first (only if not already created)
-        const assignmentResponse = await fetch('http://localhost:5002/api/upload-question-file', {
-          method: 'POST',
-          body: (() => {
-            const formData = new FormData();
-            formData.append('title', workflowData.assignmentName);
-            formData.append('description', workflowData.assignmentName);
-            formData.append('max_points', workflowData.maxPoints.toString());
-            formData.append('professor_id', professor?.id.toString() || '1');
-            formData.append('subject_id', selectedSubject?.id.toString() || '1');
-            if (workflowData.questionFile) {
-              formData.append('file', workflowData.questionFile);
-            }
-            return formData;
-          })()
-        });
-
-        if (!assignmentResponse.ok) {
-          throw new Error(`Assignment creation failed: ${assignmentResponse.status}`);
-        }
-
-        const assignmentResult = await assignmentResponse.json();
-        assignmentId = assignmentResult.assignment_id;
-        setWorkflowData(prev => ({ ...prev, assignmentId }));
+        throw new Error('Assignment ID not found. Please restart the workflow and ensure the assignment was created properly.');
       }
       
       // Generate solution if not already generated
@@ -1069,6 +1050,7 @@ const SimpleDashboard: React.FC = () => {
       console.log('🔍 DEBUG: Assignment created successfully:', uploadResult);
       
       // Store assignment ID in workflow data
+      console.log('🔍 DEBUG: Storing assignment ID:', uploadResult.assignment_id);
       setWorkflowData(prev => ({ ...prev, assignmentId: uploadResult.assignment_id }));
       
       // Step 2: Generate solution using the assignment ID
