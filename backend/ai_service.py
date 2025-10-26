@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 # Configuration flag to force mock responses (set to True when API quota is exceeded)
-FORCE_MOCK_RESPONSES = True  # Set to True to use mock responses instead of API calls
+FORCE_MOCK_RESPONSES = False  # Set to True to use mock responses instead of API calls
 
 # Only configure API if not forcing mock responses
 if not FORCE_MOCK_RESPONSES:

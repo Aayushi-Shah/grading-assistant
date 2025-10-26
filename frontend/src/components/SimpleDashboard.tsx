@@ -303,10 +303,19 @@ const SimpleDashboard: React.FC = () => {
     localStorage.removeItem('gradingAssistant_chatbotState');
     setChatMessages([]);
     setCurrentStep(0);
+    setWorkflowStep('name');
     setAssignmentData({
       title: '',
       description: '',
       file: null,
+      solution: '',
+      rubrics: '',
+      maxPoints: 100,
+      assignmentId: null
+    });
+    setWorkflowData({
+      assignmentName: '',
+      questionFile: null,
       solution: '',
       rubrics: '',
       maxPoints: 100,
@@ -438,13 +447,16 @@ const SimpleDashboard: React.FC = () => {
     if (!professor) return;
     
     try {
+      console.log('🔍 DEBUG: Fetching subjects for professor:', professor.id);
       const response = await fetch(`http://localhost:5002/api/subjects?professor_id=${professor.id}`);
       if (response.ok) {
         const subjectsData = await response.json();
+        console.log('🔍 DEBUG: Subjects fetched:', subjectsData);
         setSubjects(subjectsData);
         
         // Set the first subject as selected by default
         if (subjectsData.length > 0 && !selectedSubject) {
+          console.log('🔍 DEBUG: Setting default subject:', subjectsData[0]);
           setSelectedSubject(subjectsData[0]);
         }
       } else {
@@ -642,6 +654,7 @@ const SimpleDashboard: React.FC = () => {
     }
   }, []);
 
+
   // Save chatbot state whenever important state changes
   useEffect(() => {
     // Only save if we have meaningful state (not just initial empty state)
@@ -726,7 +739,7 @@ const SimpleDashboard: React.FC = () => {
       maxPoints: 100,
       assignmentId: null
     });
-    addBotMessage("🎯 **Welcome to the Assignment Creation Workflow!**\n\n**Step 1/6: Assignment Name**\nWhat would you like to call this assignment?");
+    addBotMessage("🎯 **Welcome to the Assignment Creation Workflow!**\n\n**Step 1/7: Assignment Name**\nWhat would you like to call this assignment?");
   };
 
   const handleWorkflowStep = (userInput: string) => {
@@ -792,7 +805,7 @@ const SimpleDashboard: React.FC = () => {
       setWorkflowData(prev => ({ ...prev, solution: solutionResult.solution }));
       setCurrentSolution(solutionResult.solution);
       setShowSolutionModal(true);
-      addBotMessage(`✅ **New Solution Generated!**\n\n**Step 3/6: Review Solution**\n\nPlease review the new solution in the popup window and choose your action.`);
+      addBotMessage(`✅ **New Solution Generated!**\n\n**Step 3/7: Review Solution**\n\nPlease review the new solution in the popup window and choose your action.`);
       
     } catch (error) {
       console.error('Error regenerating solution:', error);
@@ -808,10 +821,48 @@ const SimpleDashboard: React.FC = () => {
     addBotMessage("🤔 **Please use the popup window to review the solution and choose your action.**");
   };
 
-  const handleRubricsInput = (rubrics: string) => {
-    setWorkflowData(prev => ({ ...prev, rubrics }));
-    setWorkflowStep('upload');
-    addBotMessage(`✅ **Rubrics Set:** "${rubrics}"\n\n**Step 5/6: Student Submissions Upload**\nNow please upload the ZIP file containing student submissions.\n\nClick the "Choose File" button below to upload the submissions ZIP file.`);
+  const handleRubricsInput = async (input: string) => {
+    // Check if this is the first time asking for rubrics
+    if (!workflowData.rubrics) {
+      setWorkflowData(prev => ({ ...prev, rubrics: input }));
+      addBotMessage(`✅ **Rubrics Set:** "${input}"\n\n**Step 5/7: Maximum Points**\nWhat is the maximum points for this assignment? (e.g., 100, 50, etc.)`);
+    } else {
+      // This is the max points input
+      const maxPoints = parseInt(input);
+      if (isNaN(maxPoints) || maxPoints <= 0) {
+        addBotMessage(`❌ **Invalid input.** Please enter a valid number for maximum points (e.g., 100, 50, etc.)`);
+        return;
+      }
+      
+      // Update the assignment with max points
+      if (workflowData.assignmentId) {
+        try {
+          const updateResponse = await fetch(`http://localhost:5002/api/assignments/${workflowData.assignmentId}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              max_points: maxPoints
+            })
+          });
+          
+          if (!updateResponse.ok) {
+            throw new Error(`Failed to update assignment: ${updateResponse.status}`);
+          }
+          
+          console.log('✅ Assignment updated with max points:', maxPoints);
+        } catch (error) {
+          console.error('Error updating assignment:', error);
+          addBotMessage(`❌ **Error updating assignment:** ${error instanceof Error ? error.message : 'Unknown error'}`);
+          return;
+        }
+      }
+      
+      setWorkflowData(prev => ({ ...prev, maxPoints }));
+      setWorkflowStep('upload');
+      addBotMessage(`✅ **Maximum Points Set:** ${maxPoints}\n\n**Step 6/7: Student Submissions Upload**\nNow please upload the ZIP file containing student submissions.\n\nClick the "Choose File" button below to upload the submissions ZIP file.`);
+    }
   };
 
   const handleSolutionUpload = (input: string) => {
@@ -891,7 +942,7 @@ const SimpleDashboard: React.FC = () => {
     setUploadProgress(0);
     
     try {
-      addBotMessage(`📁 **Student Submissions Uploaded Successfully!**\n\nFile: ${file.name} (${(file.size / 1024).toFixed(1)}KB)\n\n**Step 6/6: Complete Process**\n\nStarting the grading process...`);
+      addBotMessage(`📁 **Student Submissions Uploaded Successfully!**\n\nFile: ${file.name} (${(file.size / 1024).toFixed(1)}KB)\n\n**Step 7/7: Complete Process**\n\nStarting the grading process...`);
       
       // Create assignment first
       const assignmentResponse = await fetch('http://localhost:5002/api/upload-question-file', {
@@ -976,7 +1027,7 @@ const SimpleDashboard: React.FC = () => {
       formData.append('title', workflowData.assignmentName);
       formData.append('description', workflowData.assignmentName);
       formData.append('file', file);
-      formData.append('max_points', workflowData.maxPoints.toString());
+      formData.append('max_points', '100'); // Default max points, will be updated later in rubrics step
       formData.append('professor_id', professor?.id.toString() || '1');
       formData.append('subject_id', selectedSubject?.id.toString() || '1');
 
@@ -985,7 +1036,8 @@ const SimpleDashboard: React.FC = () => {
         description: workflowData.assignmentName,
         file: file.name,
         max_points: workflowData.maxPoints,
-        professor_id: professor?.id
+        professor_id: professor?.id,
+        subject_id: selectedSubject?.id
       });
 
       // Upload file and create assignment
@@ -1164,7 +1216,7 @@ const SimpleDashboard: React.FC = () => {
     if (workflowStep === 'solution') {
       // New workflow: Move to rubrics step
       setWorkflowStep('rubrics');
-      addBotMessage(`✅ **Solution Approved!**\n\n**Step 4/6: Grading Rubrics**\nPlease provide the grading rubrics for this assignment.\n\nExample: 'Code quality (30%), Correctness (40%), Efficiency (20%), Documentation (10%)'`);
+      addBotMessage(`✅ **Solution Approved!**\n\n**Step 4/7: Grading Rubrics**\nPlease provide the grading rubrics for this assignment.\n\nExample: 'Code quality (30%), Correctness (40%), Efficiency (20%), Documentation (10%)'`);
     } else {
       // Legacy workflow
     addBotMessage(`✅ **Solution Approved!**\n\nNow upload the ZIP file containing student submissions to start grading:`);
@@ -1481,11 +1533,12 @@ const SimpleDashboard: React.FC = () => {
                     <div className="relative">
                       <select
                         value={selectedSubject?.id || ''}
-                        onChange={(e) => {
-                          const subjectId = parseInt(e.target.value);
-                          const subject = subjects.find(s => s.id === subjectId);
-                          setSelectedSubject(subject || null);
-                        }}
+                onChange={(e) => {
+                  const subjectId = parseInt(e.target.value);
+                  const subject = subjects.find(s => s.id === subjectId);
+                  console.log('🔍 DEBUG: Subject changed:', { subjectId, subject });
+                  setSelectedSubject(subject || null);
+                }}
                         className="bg-white/20 backdrop-blur-sm border border-white/30 rounded-lg px-4 py-2 pr-10 text-white focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent appearance-none cursor-pointer w-full"
                       >
                         {subjects.map((subject) => (
@@ -1514,8 +1567,8 @@ const SimpleDashboard: React.FC = () => {
                   <div className="text-2xl font-bold">{stats.totalAssignments}</div>
                   <div className="text-sm text-blue-200">
                     {selectedSubject ? `${selectedSubject.code} Assignments` : 'Assignments'}
-                  </div>
                 </div>
+              </div>
                 <div className="text-center">
                   {isLoadingStats ? (
                     <div className="flex items-center justify-center space-x-2">
@@ -1591,11 +1644,11 @@ const SimpleDashboard: React.FC = () => {
                         transition={{ delay: 1.0 }}
                       >
                         <div className="w-2 h-2 bg-blue-500 rounded-full mr-2 animate-pulse"></div>
-                        {workflowStep === 'question' ? 'Step 2/6: Question Upload' :
-                         workflowStep === 'solution' ? 'Step 3/6: Solution Generation' :
-                         workflowStep === 'rubrics' ? 'Step 4/6: Rubrics Input' :
-                         workflowStep === 'upload' ? 'Step 5/6: Submissions Upload' :
-                         workflowStep === 'complete' ? 'Step 6/6: Complete' : 'Active'}
+                        {workflowStep === 'question' ? 'Step 2/7: Question Upload' :
+                         workflowStep === 'solution' ? 'Step 3/7: Solution Generation' :
+                         workflowStep === 'rubrics' ? 'Step 4/7: Rubrics & Points' :
+                         workflowStep === 'upload' ? 'Step 6/7: Submissions Upload' :
+                         workflowStep === 'complete' ? 'Step 7/7: Complete' : 'Active'}
                       </motion.div>
                     )}
               </div>
@@ -1816,9 +1869,10 @@ const SimpleDashboard: React.FC = () => {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 1.2, duration: 0.6 }}
                 >
+                  <>
                   <form 
                     onSubmit={handleChatSubmit} 
-                    className="relative flex space-x-3 bg-white/95 dark:bg-slate-800/95 backdrop-blur-2xl rounded-2xl p-4 border border-slate-200/40 dark:border-slate-700/50 shadow-xl"
+                      className="relative flex space-x-3 bg-white/95 dark:bg-slate-800/95 backdrop-blur-2xl rounded-2xl p-4 border border-slate-200/40 dark:border-slate-700/50 shadow-xl"
                   >
                     {/* Input Background Glow */}
                     <div className="absolute inset-0 bg-gradient-to-r from-indigo-50/60 to-blue-50/60 dark:from-indigo-900/20 dark:to-blue-900/20 rounded-2xl"></div>
@@ -1870,7 +1924,7 @@ const SimpleDashboard: React.FC = () => {
                     </motion.button>
                     
                     {/* Clear Chat Button */}
-                    {(chatMessages.length > 0 || currentStep > 0) && (
+                    {chatMessages.length > 0 && (
                       <motion.button
                         type="button"
                         onClick={clearChatbotState}
@@ -1920,6 +1974,7 @@ const SimpleDashboard: React.FC = () => {
                       <span>Progress saved</span>
                     </motion.div>
                   )}
+                  </>
                 </motion.div>
                 
                 
