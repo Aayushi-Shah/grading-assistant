@@ -290,64 +290,42 @@ def upload_assignment_zip(assignment_id):
         db.session.commit()
         
         # Automatically start grading process after successful upload
-        print(f"🚀 Auto-starting grading for assignment {assignment_id}")
-        print(f"📁 ZIP file saved to: {zip_path}")
-        print(f"📂 Extracted to: {extract_path}")
+        import sys
+        sys.stdout.flush()  # Force flush to ensure messages appear
+        print(f"🚀 Starting grading for assignment {assignment_id}", flush=True)
+        print(f"📁 ZIP file saved to: {zip_path}", flush=True)
+        print(f"📂 Extracted to: {extract_path}", flush=True)
         
         try:
             # Use default rubric and max points
             default_rubric = "Code quality, correctness, efficiency, and adherence to requirements"
             max_points = assignment.max_points or 100
             
-            print(f"📋 Using rubric: {default_rubric}")
-            print(f"📊 Max points: {max_points}")
+            print(f"📋 Using rubric: {default_rubric}", flush=True)
+            print(f"📊 Max points: {max_points}", flush=True)
             
             # Import here to avoid circular imports
             from ai_service import grade_all_submissions
             
-            # Start grading in background thread to avoid blocking the response
-            import threading
-            
-            def grade_background():
-                try:
-                    print(f"🔄 Background thread started for assignment {assignment_id}")
-                    print(f"🔄 Thread ID: {threading.current_thread().ident}")
-                    # Create a new application context for this thread
-                    with current_app.app_context():
-                        print(f"🔄 App context created for assignment {assignment_id}")
-                        result = grade_all_submissions(assignment_id, default_rubric, max_points)
-                        print(f"✅ Auto-grading completed for assignment {assignment_id}")
-                        print(f"📊 Results: {result['total_submissions']} submissions, avg score: {result['average_score']}")
-                except Exception as e:
-                    print(f"❌ Auto-grading failed for assignment {assignment_id}: {e}")
-                    import traceback
-                    traceback.print_exc()
-            
-            # Start background thread
-            # Pass the current app object to the thread
-            from flask import _app_ctx_stack
-            app_for_thread = current_app._get_current_object()
-            
-            def grade_with_app():
-                with app_for_thread.app_context():
-                    grade_background()
-            
-            thread = threading.Thread(target=grade_with_app)
-            thread.daemon = True
-            thread.start()
-            print(f"🧵 Background grading thread started for assignment {assignment_id}")
+            # Run grading synchronously (blocks until complete)
+            print(f"🔄 Starting synchronous grading for assignment {assignment_id}", flush=True)
+            print(f"⏰ This will take approximately 30-60 seconds...", flush=True)
+            result = grade_all_submissions(assignment_id, default_rubric, max_points)
+            print(f"✅ Auto-grading completed for assignment {assignment_id}", flush=True)
+            print(f"📊 Results: {result['total_submissions']} submissions, avg score: {result['average_score']}", flush=True)
+            sys.stdout.flush()
             
         except Exception as e:
-            print(f"⚠️ Failed to start auto-grading: {e}")
+            print(f"⚠️ Grading failed: {e}")
             import traceback
             traceback.print_exc()
-            # Don't fail the upload if grading fails to start
+            # Don't fail the upload if grading fails
         
         return jsonify({
-            'message': 'File uploaded, extracted, and grading started automatically',
+            'message': 'File uploaded, extracted, and graded successfully',
             'zip_path': zip_path,
             'extracted_path': extract_path,
-            'grading_status': 'started'
+            'grading_status': 'completed'
         }), 200
         
     except zipfile.BadZipFile:

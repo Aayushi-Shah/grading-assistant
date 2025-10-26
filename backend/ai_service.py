@@ -276,14 +276,17 @@ def grade_all_submissions(assignment_id, rubric, max_points):
     successful_grades = 0
     
     for i, file_path in enumerate(python_files):
-        print(f"Grading {i+1}/{len(python_files)}: {os.path.basename(file_path)}")
+        import sys
+        sys.stdout.flush()
+        print(f"Grading {i+1}/{len(python_files)}: {os.path.basename(file_path)}", flush=True)
         
         # Read student code
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 student_code = f.read()
+            print(f"  📄 Read {len(student_code)} characters", flush=True)
         except Exception as e:
-            print(f"  ⚠️  Error reading file: {e}")
+            print(f"  ⚠️  Error reading file: {e}", flush=True)
             student_code = ""
         
         # Extract student name from filename
@@ -291,6 +294,8 @@ def grade_all_submissions(assignment_id, rubric, max_points):
         
         # Grade the submission
         try:
+            print(f"  🤖 Sending to AI for grading...", flush=True)
+            sys.stdout.flush()
             grade_result = grade_submission(
                 student_code,
                 assignment.description or "Code assignment",
@@ -322,10 +327,13 @@ def grade_all_submissions(assignment_id, rubric, max_points):
                 "status": grade_result["status"]
             })
             
-            print(f"  ✅ Score: {grade_result['score']}/{max_points}")
+            print(f"  ✅ Score: {grade_result['score']}/{max_points}", flush=True)
+            sys.stdout.flush()
             
         except Exception as e:
-            print(f"  ❌ Grading failed: {e}")
+            print(f"  ❌ Grading failed: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
             
             # Save error result
             submission = SubmissionResult(

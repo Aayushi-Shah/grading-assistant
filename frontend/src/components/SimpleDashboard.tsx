@@ -407,6 +407,8 @@ const SimpleDashboard: React.FC = () => {
       const uploadFormData = new FormData();
       uploadFormData.append('file', file);
       
+      addBotMessage(`⏳ **Uploading and processing... This may take up to a minute...**\n\nPlease wait while the system:\n• Uploads your ZIP file\n• Extracts all Python files\n• Generates a reference solution\n• Grades each student submission`);
+      
       const uploadResponse = await fetch(`/api/assignments/${assignmentData.assignmentId}/upload`, {
         method: 'POST',
         body: uploadFormData
@@ -421,7 +423,7 @@ const SimpleDashboard: React.FC = () => {
       const uploadResult = await uploadResponse.json();
       console.log('✅ Upload successful:', uploadResult);
       
-      addBotMessage(`✅ **Student submissions uploaded successfully!**\n\n🤖 **AI grading has started automatically in the background!**\n\nYou'll see the results once grading is complete. The system will:\n• Extract all Python files from the ZIP\n• Generate a reference solution using AI\n• Grade each student submission\n• Save results to the database\n\nCheck back in a few minutes for the complete grading report!`);
+      addBotMessage(`✅ **Grading completed successfully!**\n\nThe system has:\n• Extracted ${uploadResult.total_submissions || 'multiple'} Python files\n• Generated a reference solution\n• Graded each student submission\n• Saved results to the database\n\n🎉 **You can now view the complete grading report!**`);
       
       // Reset workflow
       setCurrentStep(0);
